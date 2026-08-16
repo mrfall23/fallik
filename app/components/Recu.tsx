@@ -29,16 +29,16 @@ const fmt = (n: number) => n.toLocaleString('fr-FR');
 
 export default function Recu({ data }: { data: RecuData }) {
   return (
-    <div style={{ width: '360px', background: '#FBF7EF', color: '#3E2C20', fontFamily: "'Manrope', system-ui, sans-serif", padding: '26px 24px 22px', boxSizing: 'border-box' }}>
+    <div style={{ width: '360px', background: '#FCFDFF', color: '#1A2438', fontFamily: "'Manrope', system-ui, sans-serif", padding: '26px 24px 22px', boxSizing: 'border-box' }}>
       {/* En-tete : logo + boutique */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px', paddingBottom: '18px', borderBottom: '1.5px solid rgba(62,44,32,.18)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px', paddingBottom: '18px', borderBottom: '1.5px solid rgba(26,36,56,.18)' }}>
         <FalloraMark size={44} />
-        <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: '30px', fontWeight: 600, letterSpacing: '1px', lineHeight: 1, color: '#3E2C20' }}>{data.boutique}</div>
-        <div style={{ fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', color: '#A9673D', fontWeight: 600 }}>Reçu d'achat</div>
+        <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: '30px', fontWeight: 600, letterSpacing: '1px', lineHeight: 1, color: '#1A2438' }}>{data.boutique}</div>
+        <div style={{ fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', color: '#2563EB', fontWeight: 600 }}>Reçu d'achat</div>
       </div>
 
       {/* Meta : numero, date, vendeuse, client */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12.5px', padding: '14px 0', borderBottom: '1px dashed rgba(62,44,32,.22)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '12.5px', padding: '14px 0', borderBottom: '1px dashed rgba(26,36,56,.22)' }}>
         <Ligne label="Reçu N°" val={data.numero} />
         <Ligne label="Date" val={data.date} />
         <Ligne label="Vendeuse" val={data.vendeuse} />
@@ -47,11 +47,11 @@ export default function Recu({ data }: { data: RecuData }) {
       </div>
 
       {/* Articles */}
-      <div style={{ padding: '14px 0', borderBottom: '1px dashed rgba(62,44,32,.22)' }}>
+      <div style={{ padding: '14px 0', borderBottom: '1px dashed rgba(26,36,56,.22)' }}>
         {data.items.map((it, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', fontSize: '13px', marginBottom: i === data.items.length - 1 ? 0 : '8px' }}>
             <span style={{ flex: 1 }}>
-              <span style={{ color: '#A9673D', fontWeight: 700 }}>{it.quantite}×</span> {it.nom}
+              <span style={{ color: '#2563EB', fontWeight: 700 }}>{it.quantite}×</span> {it.nom}
             </span>
             <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(it.prix * it.quantite)}</span>
           </div>
@@ -64,27 +64,27 @@ export default function Recu({ data }: { data: RecuData }) {
           <span style={{ fontSize: '14px', fontWeight: 700 }}>TOTAL</span>
           <span>
             <span style={{ fontSize: '24px', fontWeight: 800 }}>{fmt(data.total)}</span>
-            <span style={{ fontSize: '12px', color: '#A9673D', fontWeight: 700, marginLeft: '4px' }}>FCFA</span>
+            <span style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700, marginLeft: '4px' }}>FCFA</span>
           </span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: 'rgba(62,44,32,.7)', marginTop: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: 'rgba(26,36,56,.7)', marginTop: '8px' }}>
           <span>Payé ({MODE_LABEL[data.mode] || data.mode})</span>
           <span style={{ fontWeight: 600 }}>{fmt(data.paye)} FCFA</span>
         </div>
         {data.reste > 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#C08A2E', fontWeight: 700, marginTop: '4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#C8891F', fontWeight: 700, marginTop: '4px' }}>
             <span>Reste à payer</span>
             <span>{fmt(data.reste)} FCFA</span>
           </div>
         ) : (
-          <div style={{ marginTop: '8px', textAlign: 'center', fontSize: '11.5px', fontWeight: 700, color: '#3F9468', background: 'rgba(63,148,104,.12)', border: '1px solid rgba(63,148,104,.28)', borderRadius: '8px', padding: '5px' }}>
+          <div style={{ marginTop: '8px', textAlign: 'center', fontSize: '11.5px', fontWeight: 700, color: '#1F9D6B', background: 'rgba(31,157,107,.12)', border: '1px solid rgba(31,157,107,.28)', borderRadius: '8px', padding: '5px' }}>
             ✓ PAYÉ INTÉGRALEMENT
           </div>
         )}
       </div>
 
       {/* Pied */}
-      <div style={{ textAlign: 'center', marginTop: '18px', paddingTop: '14px', borderTop: '1.5px solid rgba(62,44,32,.18)', fontSize: '12.5px', color: '#3E2C20' }}>
+      <div style={{ textAlign: 'center', marginTop: '18px', paddingTop: '14px', borderTop: '1.5px solid rgba(26,36,56,.18)', fontSize: '12.5px', color: '#1A2438' }}>
         Merci de votre achat 💛
       </div>
     </div>
@@ -94,7 +94,7 @@ export default function Recu({ data }: { data: RecuData }) {
 function Ligne({ label, val }: { label: string; val: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-      <span style={{ color: 'rgba(62,44,32,.55)' }}>{label}</span>
+      <span style={{ color: 'rgba(26,36,56,.55)' }}>{label}</span>
       <span style={{ fontWeight: 600, textAlign: 'right' }}>{val}</span>
     </div>
   );

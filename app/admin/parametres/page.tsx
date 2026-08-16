@@ -7,11 +7,10 @@ import { supabase } from '@/lib/supabase';
 type Vendeuse = { id: number; nom: string; email: string; actif: boolean; role: string };
 const FORM_VIDE = { nom: '', email: '', mot_de_passe: '' };
 
-const inputStyle: React.CSSProperties = {
-  height: '44px', padding: '0 14px', borderRadius: '12px',
-  background: 'var(--surface-inset)', border: '1px solid var(--line)',
-  outline: 'none', color: 'var(--ink)', fontSize: '14px', width: '100%',
-};
+const INK = '#1A2438', BLUE = '#2563EB', GRAD = 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
+const carte: React.CSSProperties = { background: '#fff', borderRadius: '18px', border: `1px solid ${LINE}`, boxShadow: '0 6px 20px rgba(26,36,56,.05)' };
+const inputStyle: React.CSSProperties = { height: '44px', padding: '0 14px', borderRadius: '12px', background: '#F6F8FC', border: '1px solid #E4E9F2', outline: 'none', color: INK, fontSize: '14px', width: '100%' };
+const labelStyle: React.CSSProperties = { fontSize: '11px', fontWeight: 600, color: SOFT, letterSpacing: '.5px', marginBottom: '6px', textTransform: 'uppercase' };
 
 export default function AdminParametres() {
   const [vendeuses, setVendeuses] = useState<Vendeuse[]>([]);
@@ -94,22 +93,24 @@ export default function AdminParametres() {
   const actives = vendeuses.filter(v => v.actif);
   const inactives = vendeuses.filter(v => !v.actif);
 
+  const miniStats = [
+    { icon: 'group', label: 'Total comptes', value: vendeuses.length.toString(), col: BLUE },
+    { icon: 'check_circle', label: 'Actives', value: actives.length.toString(), col: '#1F9D6B' },
+    { icon: 'block', label: 'Désactivées', value: inactives.length.toString(), col: inactives.length > 0 ? '#D24444' : '#1F9D6B' },
+  ];
+
   return (
     <div className="fade-up">
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '16px', marginBottom: '24px' }}>
-        {[
-          { icon: 'group', label: 'Total comptes', value: vendeuses.length.toString(), color: 'var(--ink)' },
-          { icon: 'check_circle', label: 'Actives', value: actives.length.toString(), color: 'var(--success)' },
-          { icon: 'block', label: 'Désactivées', value: inactives.length.toString(), color: 'var(--danger)' },
-        ].map(s => (
-          <div key={s.label} style={{ padding: '20px', borderRadius: '18px', background: 'var(--surface)', border: '1px solid var(--accent-12)', display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: '44px', height: '44px', borderRadius: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-12)', border: '1px solid var(--accent-20)', flexShrink: 0 }}>
-              <span className="ms" style={{ fontSize: '22px', color: 'var(--accent)' }}>{s.icon}</span>
+      {/* Résumé */}
+      <div style={{ ...carte, display: 'flex', flexWrap: 'wrap', marginBottom: '18px' }}>
+        {miniStats.map((m, i) => (
+          <div key={m.label} style={{ flex: 1, minWidth: '160px', display: 'flex', alignItems: 'center', gap: '13px', padding: '18px 22px', borderLeft: i === 0 ? 'none' : '1px solid #F1F4FA' }}>
+            <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#EEF3FC', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span className="ms" style={{ fontSize: '22px', color: m.col }}>{m.icon}</span>
             </div>
             <div>
-              <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '.4px', color: 'var(--ink-55)', textTransform: 'uppercase' as const }}>{s.label}</div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '.5px', color: SOFT, textTransform: 'uppercase' }}>{m.label}</div>
+              <div style={{ fontSize: '20px', fontWeight: 800, color: INK, marginTop: '2px' }}>{m.value}</div>
             </div>
           </div>
         ))}
@@ -117,57 +118,62 @@ export default function AdminParametres() {
 
       {/* Message succès */}
       {message && (
-        <div style={{ padding: '12px 16px', borderRadius: '12px', background: 'var(--success-tint)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: '13.5px', textAlign: 'center', marginBottom: '16px', fontWeight: 600 }}>
+        <div style={{ padding: '12px 16px', borderRadius: '12px', background: 'rgba(31,157,107,.12)', border: '1px solid rgba(31,157,107,.28)', color: '#1F9D6B', fontSize: '13.5px', textAlign: 'center', marginBottom: '16px', fontWeight: 600 }}>
           <span className="ms" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '6px' }}>check_circle</span>{message}
         </div>
       )}
 
       {/* Bouton ajouter */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
-        <button onClick={ouvrirAjout} style={{ display: 'flex', alignItems: 'center', gap: '9px', height: '46px', padding: '0 22px', border: 'none', borderRadius: '14px', cursor: 'pointer', background: 'var(--accent-grad)', color: 'var(--on-accent)', fontSize: '14.5px', fontWeight: 700, boxShadow: 'var(--shadow-accent)' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+        <button onClick={ouvrirAjout} style={{ display: 'flex', alignItems: 'center', gap: '9px', height: '46px', padding: '0 22px', border: 'none', borderRadius: '13px', cursor: 'pointer', background: GRAD, color: '#fff', fontSize: '14.5px', fontWeight: 700, boxShadow: '0 8px 18px rgba(37,99,235,.28)' }}>
           <span className="ms" style={{ fontSize: '20px' }}>person_add</span>Ajouter une vendeuse
         </button>
       </div>
 
-      {/* Formulaire */}
+      {/* Formulaire modal */}
       {formOuvert && (
-        <div style={{ marginBottom: '20px', padding: '24px', borderRadius: '20px', background: 'var(--surface-2)', border: '1px solid var(--accent-20)', backdropFilter: 'blur(20px)' }}>
-          <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)', marginBottom: '18px' }}>
-            {editee ? `Modifier — ${editee.nom}` : 'Nouveau compte vendeuse'}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '12px', marginBottom: '16px' }}>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink-45)', letterSpacing: '.5px', marginBottom: '6px' }}>NOM COMPLET *</div>
-              <input style={inputStyle} placeholder="Ex : Mariam Koné" value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} />
+        <div onClick={fermer} style={{ position: 'fixed', inset: 0, background: 'rgba(16,24,40,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', zIndex: 100, overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '560px', boxShadow: '0 24px 60px rgba(16,24,40,.28)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #EEF2F8' }}>
+              <div style={{ fontSize: '17px', fontWeight: 800, color: INK }}>{editee ? `Modifier — ${editee.nom}` : 'Nouveau compte vendeuse'}</div>
+              <button onClick={fermer} aria-label="Fermer" style={{ width: '36px', height: '36px', borderRadius: '10px', border: 'none', background: '#F1F4FA', color: SOFT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span className="ms" style={{ fontSize: '20px' }}>close</span>
+              </button>
             </div>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink-45)', letterSpacing: '.5px', marginBottom: '6px' }}>ADRESSE EMAIL *</div>
-              <input style={inputStyle} type="email" placeholder="vendeuse@fallora.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink-45)', letterSpacing: '.5px', marginBottom: '6px' }}>
-                {editee ? 'NOUVEAU MOT DE PASSE' : 'MOT DE PASSE *'}
+            <div style={{ padding: '22px 24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '14px', marginBottom: '16px' }}>
+                <div>
+                  <div style={labelStyle}>Nom complet *</div>
+                  <input style={inputStyle} placeholder="Ex : Mariam Koné" value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} />
+                </div>
+                <div>
+                  <div style={labelStyle}>Adresse email *</div>
+                  <input style={inputStyle} type="email" placeholder="vendeuse@fallik.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                </div>
+                <div>
+                  <div style={labelStyle}>{editee ? 'Nouveau mot de passe' : 'Mot de passe *'}</div>
+                  <input style={inputStyle} type="password" placeholder={editee ? 'Laisser vide pour ne pas changer' : '6 caractères minimum'} value={form.mot_de_passe} onChange={e => setForm({ ...form, mot_de_passe: e.target.value })} />
+                </div>
               </div>
-              <input style={inputStyle} type="password" placeholder={editee ? 'Laisser vide pour ne pas changer' : '6 caractères minimum'} value={form.mot_de_passe} onChange={e => setForm({ ...form, mot_de_passe: e.target.value })} />
+              {erreur && (
+                <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(210,68,68,.10)', border: '1px solid rgba(210,68,68,.25)', color: '#D24444', fontSize: '13px', marginBottom: '14px' }}>{erreur}</div>
+              )}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={sauvegarder} disabled={sauvegarde} style={{ flex: 1, height: '46px', border: 'none', borderRadius: '13px', cursor: 'pointer', background: GRAD, color: '#fff', fontWeight: 700, fontSize: '14px', opacity: sauvegarde ? 0.7 : 1 }}>
+                  {sauvegarde ? 'Sauvegarde…' : editee ? 'Enregistrer les modifications' : 'Créer le compte'}
+                </button>
+                <button onClick={fermer} style={{ height: '46px', padding: '0 22px', border: '1px solid #E4E9F2', borderRadius: '13px', cursor: 'pointer', background: '#fff', color: '#5A6472', fontSize: '14px', fontWeight: 600 }}>Annuler</button>
+              </div>
             </div>
-          </div>
-          {erreur && (
-            <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--danger-tint)', border: '1px solid var(--danger-line)', color: 'var(--danger)', fontSize: '13px', marginBottom: '14px' }}>{erreur}</div>
-          )}
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={sauvegarder} disabled={sauvegarde} style={{ flex: 1, height: '46px', border: 'none', borderRadius: '13px', cursor: 'pointer', background: 'var(--accent-grad)', color: 'var(--on-accent)', fontWeight: 700, fontSize: '14px' }}>
-              {sauvegarde ? 'Sauvegarde...' : editee ? 'Enregistrer les modifications' : 'Créer le compte'}
-            </button>
-            <button onClick={fermer} style={{ height: '46px', padding: '0 20px', border: '1px solid var(--line)', borderRadius: '13px', cursor: 'pointer', background: 'transparent', color: 'var(--ink-55)', fontSize: '14px' }}>Annuler</button>
           </div>
         </div>
       )}
 
       {chargement ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--ink-45)' }}>Chargement...</div>
+        <div style={{ textAlign: 'center', padding: '60px', color: MUTE }}>Chargement…</div>
       ) : vendeuses.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--ink-45)' }}>
-          <span className="ms" style={{ fontSize: '48px', display: 'block', marginBottom: '12px', color: 'var(--accent-30)' }}>group</span>
+        <div style={{ ...carte, textAlign: 'center', padding: '60px', color: MUTE }}>
+          <span className="ms" style={{ fontSize: '46px', display: 'block', marginBottom: '10px', color: '#C6D2E8' }}>group</span>
           Aucune vendeuse. Commencez par en ajouter une.
         </div>
       ) : (
@@ -175,25 +181,23 @@ export default function AdminParametres() {
           {/* Vendeuses actives */}
           {actives.length > 0 && (
             <div style={{ marginBottom: '24px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1.5px', color: 'var(--success)', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1.2px', color: '#1F9D6B', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span className="ms" style={{ fontSize: '16px' }}>check_circle</span>Comptes actifs ({actives.length})
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {actives.map(v => (
-                  <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', rowGap: '12px', flexWrap: 'wrap', padding: '18px 22px', borderRadius: '18px', background: 'var(--surface)', border: '1px solid var(--success-line)', backdropFilter: 'blur(20px)' }}>
-                    <div style={{ width: '46px', height: '46px', borderRadius: '14px', background: 'var(--success-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--success-line)', flexShrink: 0 }}>
-                      <span style={{ fontFamily: "var(--font-cormorant), serif", fontSize: '22px', color: 'var(--success)', fontWeight: 600 }}>{v.nom[0].toUpperCase()}</span>
-                    </div>
+                  <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', rowGap: '12px', flexWrap: 'wrap', padding: '16px 20px', borderRadius: '16px', background: '#fff', border: `1px solid ${LINE}`, boxShadow: '0 4px 14px rgba(26,36,56,.04)' }}>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '14px', background: 'rgba(31,157,107,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 800, color: '#1F9D6B', flexShrink: 0 }}>{v.nom[0].toUpperCase()}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--ink)' }}>{v.nom}</div>
-                      <div style={{ fontSize: '13px', color: 'var(--ink-45)', marginTop: '2px' }}>{v.email}</div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: INK }}>{v.nom}</div>
+                      <div style={{ fontSize: '13px', color: MUTE, marginTop: '2px' }}>{v.email}</div>
                     </div>
-                    <div style={{ padding: '4px 12px', borderRadius: '20px', background: 'var(--success-tint)', border: '1px solid var(--success-line)', fontSize: '12px', fontWeight: 700, color: 'var(--success)' }}>Active</div>
+                    <div style={{ padding: '4px 12px', borderRadius: '20px', background: 'rgba(31,157,107,.12)', fontSize: '12px', fontWeight: 700, color: '#1F9D6B' }}>Active</div>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => ouvrirEdit(v)} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 14px', borderRadius: '11px', cursor: 'pointer', background: 'var(--accent-12)', border: '1px solid var(--accent-25)', color: 'var(--accent-deep)', fontSize: '13px', fontWeight: 600 }}>
+                      <button onClick={() => ouvrirEdit(v)} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 14px', borderRadius: '11px', cursor: 'pointer', background: '#EEF3FC', border: 'none', color: BLUE, fontSize: '13px', fontWeight: 600 }}>
                         <span className="ms" style={{ fontSize: '17px' }}>edit</span>Modifier
                       </button>
-                      <button onClick={() => toggleActif(v)} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 14px', borderRadius: '11px', cursor: 'pointer', background: 'var(--danger-tint)', border: '1px solid var(--danger-line)', color: 'var(--danger)', fontSize: '13px', fontWeight: 600 }}>
+                      <button onClick={() => toggleActif(v)} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 14px', borderRadius: '11px', cursor: 'pointer', background: 'rgba(210,68,68,.08)', border: 'none', color: '#D24444', fontSize: '13px', fontWeight: 600 }}>
                         <span className="ms" style={{ fontSize: '17px' }}>block</span>Désactiver
                       </button>
                     </div>
@@ -206,21 +210,19 @@ export default function AdminParametres() {
           {/* Vendeuses inactives */}
           {inactives.length > 0 && (
             <div>
-              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1.5px', color: 'var(--danger)', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1.2px', color: '#D24444', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span className="ms" style={{ fontSize: '16px' }}>block</span>Comptes désactivés ({inactives.length})
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {inactives.map(v => (
-                  <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', rowGap: '12px', flexWrap: 'wrap', padding: '18px 22px', borderRadius: '18px', background: 'var(--surface)', border: '1px solid var(--line)', opacity: 0.7 }}>
-                    <div style={{ width: '46px', height: '46px', borderRadius: '14px', background: 'var(--surface-inset)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--line)', flexShrink: 0 }}>
-                      <span style={{ fontFamily: "var(--font-cormorant), serif", fontSize: '22px', color: 'var(--ink-45)', fontWeight: 600 }}>{v.nom[0].toUpperCase()}</span>
-                    </div>
+                  <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', rowGap: '12px', flexWrap: 'wrap', padding: '16px 20px', borderRadius: '16px', background: '#fff', border: `1px solid ${LINE}`, opacity: 0.72 }}>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '14px', background: '#EEF1F7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 800, color: MUTE, flexShrink: 0 }}>{v.nom[0].toUpperCase()}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--ink-70)' }}>{v.nom}</div>
-                      <div style={{ fontSize: '13px', color: 'var(--ink-35)', marginTop: '2px' }}>{v.email}</div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#5A6472' }}>{v.nom}</div>
+                      <div style={{ fontSize: '13px', color: '#A5AEBD', marginTop: '2px' }}>{v.email}</div>
                     </div>
-                    <div style={{ padding: '4px 12px', borderRadius: '20px', background: 'var(--danger-tint)', border: '1px solid var(--danger-line)', fontSize: '12px', fontWeight: 700, color: 'var(--danger)' }}>Désactivée</div>
-                    <button onClick={() => toggleActif(v)} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 14px', borderRadius: '11px', cursor: 'pointer', background: 'var(--success-tint)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: '13px', fontWeight: 600 }}>
+                    <div style={{ padding: '4px 12px', borderRadius: '20px', background: 'rgba(210,68,68,.10)', fontSize: '12px', fontWeight: 700, color: '#D24444' }}>Désactivée</div>
+                    <button onClick={() => toggleActif(v)} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 14px', borderRadius: '11px', cursor: 'pointer', background: 'rgba(31,157,107,.12)', border: 'none', color: '#1F9D6B', fontSize: '13px', fontWeight: 600 }}>
                       <span className="ms" style={{ fontSize: '17px' }}>check_circle</span>Réactiver
                     </button>
                   </div>

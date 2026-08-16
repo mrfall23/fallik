@@ -19,7 +19,7 @@ export function texteRecu(d: RecuData): string {
 export async function partagerImageRecu(node: HTMLElement, d: RecuData): Promise<'partage' | 'telecharge' | 'echec'> {
   let blob: Blob | null = null;
   try {
-    blob = await toBlob(node, { pixelRatio: 2, backgroundColor: '#FBF7EF', cacheBust: true });
+    blob = await toBlob(node, { pixelRatio: 2, backgroundColor: '#FCFDFF', cacheBust: true });
   } catch {
     blob = null;
   }

@@ -4,6 +4,10 @@ import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
+const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
+const INK = '#1A2438', BLUE = '#2563EB', GRAD = 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
+const carte: React.CSSProperties = { background: '#fff', borderRadius: '18px', border: `1px solid ${LINE}`, boxShadow: '0 6px 20px rgba(26,36,56,.05)' };
+
 export default function AdminRapports() {
   const [ventes, setVentes] = useState<any[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -71,6 +75,12 @@ export default function AdminRapports() {
   const totalEncaisse = ventes.reduce((s, v) => s + v.montant_paye, 0);
   const totalEnAttente = ventes.reduce((s, v) => s + v.reste_a_payer, 0);
 
+  const stats = [
+    { label: 'Total ventes', value: fmt(totalVentes), col: INK },
+    { label: 'Encaissé', value: fmt(totalEncaisse), col: '#1F9D6B' },
+    { label: 'En attente', value: fmt(totalEnAttente), col: '#C8891F' },
+  ];
+
   const CARDS = [
     { icon: 'groups', title: 'Rapport par vendeuse', desc: 'Ventes, transactions et détails pour chaque vendeuse sur la période.', onClick: exporterParVendeuse },
     { icon: 'inventory_2', title: 'Rapport par produit', desc: 'Quantités vendues, chiffre d\'affaires et stock restant article par article.', onClick: exporterParProduit },
@@ -80,40 +90,36 @@ export default function AdminRapports() {
   return (
     <div className="fade-up">
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '16px', marginBottom: '28px' }}>
-        {[
-          { label: 'Total ventes', value: totalVentes.toLocaleString(), color: 'var(--ink)' },
-          { label: 'Encaissé', value: totalEncaisse.toLocaleString(), color: 'var(--success)' },
-          { label: 'En attente', value: totalEnAttente.toLocaleString(), color: 'var(--warn)' },
-        ].map(s => (
-          <div key={s.label} style={{ padding: '20px', borderRadius: '18px', background: 'var(--surface)', border: '1px solid var(--accent-12)', textAlign: 'center' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '.5px', color: 'var(--ink-55)', textTransform: 'uppercase', marginBottom: '8px' }}>{s.label}</div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: s.color }}>{s.value} <span style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 600 }}>FCFA</span></div>
+      <div style={{ ...carte, display: 'flex', flexWrap: 'wrap', marginBottom: '20px' }}>
+        {stats.map((s, i) => (
+          <div key={s.label} style={{ flex: 1, minWidth: '170px', padding: '20px 24px', textAlign: 'center', borderLeft: i === 0 ? 'none' : '1px solid #F1F4FA' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '.5px', color: SOFT, textTransform: 'uppercase', marginBottom: '8px' }}>{s.label}</div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: s.col }}>{s.value} <span style={{ fontSize: '12px', color: BLUE, fontWeight: 600 }}>FCFA</span></div>
           </div>
         ))}
       </div>
 
       {chargement ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--ink-45)' }}>Chargement...</div>
+        <div style={{ textAlign: 'center', padding: '40px', color: MUTE }}>Chargement…</div>
       ) : ventes.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '80px', color: 'var(--ink-45)' }}>
-          <span className="ms" style={{ fontSize: '48px', display: 'block', marginBottom: '12px', color: 'var(--accent-30)' }}>download</span>
+        <div style={{ ...carte, textAlign: 'center', padding: '80px', color: MUTE }}>
+          <span className="ms" style={{ fontSize: '46px', display: 'block', marginBottom: '10px', color: '#C6D2E8' }}>download</span>
           Aucune vente à exporter.
         </div>
       ) : (
         <>
-          <div style={{ fontSize: '14px', color: 'var(--ink-55)', marginBottom: '16px', fontWeight: 500 }}>
+          <div style={{ fontSize: '14px', color: '#5A6472', marginBottom: '16px', fontWeight: 500 }}>
             {ventes.length} vente{ventes.length > 1 ? 's' : ''} disponibles à l'export
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '18px' }}>
             {CARDS.map(r => (
-              <div key={r.title} style={{ display: 'flex', flexDirection: 'column', padding: '28px', borderRadius: '22px', background: 'var(--surface)', border: '1px solid var(--accent-12)', backdropFilter: 'blur(20px)', boxShadow: 'var(--shadow-md)' }}>
-                <div style={{ width: '54px', height: '54px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--success-tint)', border: '1px solid var(--success-line)', marginBottom: '20px' }}>
-                  <span className="ms" style={{ fontSize: '27px', color: 'var(--success)' }}>{r.icon}</span>
+              <div key={r.title} style={{ ...carte, display: 'flex', flexDirection: 'column', padding: '26px' }}>
+                <div style={{ width: '52px', height: '52px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(31,157,107,.12)', marginBottom: '18px' }}>
+                  <span className="ms" style={{ fontSize: '26px', color: '#1F9D6B' }}>{r.icon}</span>
                 </div>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink)', marginBottom: '7px' }}>{r.title}</div>
-                <div style={{ fontSize: '13.5px', lineHeight: 1.55, color: 'var(--ink-55)', marginBottom: '24px', flex: 1 }}>{r.desc}</div>
-                <button onClick={r.onClick} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', height: '48px', border: 'none', borderRadius: '14px', cursor: 'pointer', background: 'var(--accent-grad)', color: 'var(--on-accent)', fontSize: '14.5px', fontWeight: 700, boxShadow: 'var(--shadow-accent)' }}>
+                <div style={{ fontSize: '17px', fontWeight: 700, color: INK, marginBottom: '7px' }}>{r.title}</div>
+                <div style={{ fontSize: '13.5px', lineHeight: 1.55, color: '#6B7688', marginBottom: '22px', flex: 1 }}>{r.desc}</div>
+                <button onClick={r.onClick} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', height: '48px', border: 'none', borderRadius: '14px', cursor: 'pointer', background: GRAD, color: '#fff', fontSize: '14.5px', fontWeight: 700, boxShadow: '0 8px 18px rgba(37,99,235,.28)' }}>
                   <span className="ms" style={{ fontSize: '20px' }}>download</span>Télécharger Excel
                 </button>
               </div>

@@ -20,13 +20,13 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Fallora — Gestion",
-  description: "Application de gestion des ventes privées Fallora",
-  appleWebApp: { capable: true, title: "Fallora", statusBarStyle: "default" },
+  title: "Fallik — Stock & Facturation",
+  description: "Fallik — gestion de stock et facturation pour votre boutique",
+  appleWebApp: { capable: true, title: "Fallik", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#ECE5D6",
+  themeColor: "#2563EB",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

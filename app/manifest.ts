@@ -5,14 +5,14 @@ import type { MetadataRoute } from 'next';
 // plein ecran, aux couleurs de la marque.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Fallora — Gestion',
-    short_name: 'Fallora',
-    description: 'Gestion des ventes privées Fallora',
+    name: 'Fallik — Stock & Facturation',
+    short_name: 'Fallik',
+    description: 'Gestion de stock et facturation pour votre boutique',
     start_url: '/',
     display: 'standalone',
     orientation: 'portrait',
-    background_color: '#ECE5D6',
-    theme_color: '#ECE5D6',
+    background_color: '#F4F6FB',
+    theme_color: '#2563EB',
     lang: 'fr',
     icons: [
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

@@ -1,66 +1,67 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────
-   Charte Fallora — palette du logo (crème / brun / terracotta)
+   Charte FALLIK — Bleu océan (fond clair / bleu franc)
    Toutes les couleurs de l'app dérivent de ces tokens.
    ───────────────────────────────────────────────────────────── */
 :root {
   /* Fonds */
-  --bg: #ECE5D6;
-  --bg-top: #F3EDE0;
-  --bg-bottom: #E6DECC;
-  --sidebar: linear-gradient(180deg, #F1EADB, #E7DFCE);
+  --bg: #F4F6FB;
+  --bg-top: #F8FAFE;
+  --bg-bottom: #EDF1F9;
+  --sidebar: linear-gradient(180deg, #F2F5FC, #E9EEF8);
+  --header-bg: rgba(244, 246, 251, .80);
 
-  /* Texte (brun du wordmark) */
-  --ink: #3E2C20;
-  --ink-90: rgba(62, 44, 32, .90);
-  --ink-70: rgba(62, 44, 32, .68);
-  --ink-55: rgba(62, 44, 32, .55);
-  --ink-45: rgba(62, 44, 32, .45);
-  --ink-35: rgba(62, 44, 32, .35);
-  --ink-25: rgba(62, 44, 32, .25);
+  /* Texte (bleu-nuit) */
+  --ink: #1A2438;
+  --ink-90: rgba(26, 36, 56, .90);
+  --ink-70: rgba(26, 36, 56, .68);
+  --ink-55: rgba(26, 36, 56, .55);
+  --ink-45: rgba(26, 36, 56, .45);
+  --ink-35: rgba(26, 36, 56, .35);
+  --ink-25: rgba(26, 36, 56, .25);
 
-  /* Accent terracotta (remplace l'or) */
-  --accent: #A9673D;
-  --accent-bright: #C0803F;
-  --accent-deep: #8C4F2C;
-  --accent-grad: linear-gradient(135deg, #C6935C, #A15C31);
-  --accent-08: rgba(169, 103, 61, .08);
-  --accent-12: rgba(169, 103, 61, .12);
-  --accent-16: rgba(169, 103, 61, .16);
-  --accent-20: rgba(169, 103, 61, .20);
-  --accent-25: rgba(169, 103, 61, .25);
-  --accent-30: rgba(169, 103, 61, .30);
+  /* Accent bleu */
+  --accent: #2563EB;
+  --accent-bright: #4B7DF5;
+  --accent-deep: #1D4FD0;
+  --accent-grad: linear-gradient(135deg, #4B7DF5, #1D4FD0);
+  --accent-08: rgba(37, 99, 235, .08);
+  --accent-12: rgba(37, 99, 235, .12);
+  --accent-16: rgba(37, 99, 235, .16);
+  --accent-20: rgba(37, 99, 235, .20);
+  --accent-25: rgba(37, 99, 235, .25);
+  --accent-30: rgba(37, 99, 235, .30);
 
   /* Surfaces (glassmorphism clair) */
-  --surface: rgba(255, 252, 246, .60);
-  --surface-2: rgba(255, 252, 246, .82);
-  --surface-inset: rgba(120, 90, 60, .07);
-  --avatar: linear-gradient(135deg, #EEE1CE, #E3D3BB);
-  --img-empty: #EFE7D8;
+  --surface: rgba(255, 255, 255, .66);
+  --surface-2: rgba(255, 255, 255, .85);
+  --surface-inset: rgba(30, 60, 120, .06);
+  --avatar: linear-gradient(135deg, #E3ECFB, #D2E0F7);
+  --img-empty: #E8EEF8;
 
   /* Lignes */
-  --line: rgba(62, 44, 32, .12);
-  --line-soft: rgba(62, 44, 32, .07);
+  --line: rgba(26, 36, 56, .12);
+  --line-soft: rgba(26, 36, 56, .07);
 
   /* Sur accent */
-  --on-accent: #FBF6EC;
+  --on-accent: #F5F8FF;
 
   /* Sémantique */
-  --success: #3F9468;
-  --success-tint: rgba(63, 148, 104, .13);
-  --success-line: rgba(63, 148, 104, .28);
-  --warn: #C08A2E;
-  --warn-tint: rgba(192, 138, 46, .14);
-  --warn-line: rgba(192, 138, 46, .30);
-  --danger: #BE5540;
-  --danger-tint: rgba(190, 85, 64, .10);
-  --danger-line: rgba(190, 85, 64, .25);
+  --success: #1F9D6B;
+  --success-tint: rgba(31, 157, 107, .13);
+  --success-line: rgba(31, 157, 107, .28);
+  --warn: #C8891F;
+  --warn-tint: rgba(200, 137, 31, .14);
+  --warn-line: rgba(200, 137, 31, .30);
+  --danger: #D24444;
+  --danger-tint: rgba(210, 68, 68, .10);
+  --danger-line: rgba(210, 68, 68, .25);
 
-  /* Ombres (chaudes) */
-  --shadow-lg: 0 18px 50px rgba(62, 44, 32, .14);
-  --shadow-md: 0 8px 30px rgba(62, 44, 32, .10);
-  --shadow-accent: 0 12px 30px rgba(169, 103, 61, .22);
+  /* Ombres */
+  --shadow-lg: 0 18px 50px rgba(26, 36, 56, .14);
+  --shadow-md: 0 8px 30px rgba(26, 36, 56, .10);
+  --shadow-accent: 0 12px 30px rgba(37, 99, 235, .24);
 }
 
 * { box-sizing: border-box; }

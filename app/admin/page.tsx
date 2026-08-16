@@ -2,181 +2,139 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-const BADGE_UP = { fontSize: '12px', fontWeight: 700, color: 'var(--success)', background: 'var(--success-tint)', padding: '3px 9px', borderRadius: '8px' } as const;
-const BADGE_WARN = { fontSize: '12px', fontWeight: 700, color: 'var(--warn)', background: 'var(--warn-tint)', padding: '3px 9px', borderRadius: '8px' } as const;
-const BADGE_PAID = { fontSize: '12px', fontWeight: 700, color: 'var(--success)', background: 'var(--success-tint)', border: '1px solid var(--success-line)', padding: '5px 12px', borderRadius: '20px' } as const;
-const BADGE_PART = { fontSize: '12px', fontWeight: 700, color: 'var(--warn)', background: 'var(--warn-tint)', border: '1px solid var(--warn-line)', padding: '5px 12px', borderRadius: '20px' } as const;
+const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 
-export default function AdminDashboard() {
-  const [stats, setStats] = useState({ totalVentes: 0, totalProduits: 0, stockRestant: 0, paiementsEnAttente: 0 });
-  const [ventesRecentes, setVentesRecentes] = useState<any[]>([]);
-  const [topVendeuses, setTopVendeuses] = useState<any[]>([]);
+export default function Dashboard() {
+  const [s, setS] = useState({ ca: 0, factures: 0, recentes: 0, encours: 0, aEncaisser: 0, valeurStock: 0, nbArticles: 0, ruptures: 0 });
+  const [alertes, setAlertes] = useState<any[]>([]);
+  const [chart, setChart] = useState<{ key: string; jour: string; montant: number }[]>([]);
+  const [chargement, setChargement] = useState(true);
 
   useEffect(() => {
-    chargerStats();
-    const canal = supabase.channel('dashboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ventes' }, () => chargerStats())
-      .subscribe();
+    charger();
+    const canal = supabase.channel('dash').on('postgres_changes', { event: '*', schema: 'public', table: 'ventes' }, () => charger()).subscribe();
     return () => { supabase.removeChannel(canal); };
   }, []);
 
-  // Chemin normal : une seule RPC, tout est agrege cote base.
-  const chargerStats = async () => {
-    const { data, error } = await supabase.rpc('tableau_de_bord_admin');
-    if (error || !data) {
-      // Repli : la migration 20260805120000_tableau_de_bord_admin n'est
-      // peut-etre pas encore appliquee. On garde l'ancien calcul le temps du
-      // deploiement — a retirer une fois la RPC en place partout.
-      console.warn('RPC tableau_de_bord_admin indisponible, repli client-side.', error?.message);
-      return chargerStatsFallback();
-    }
-    const d = data as any;
-    setStats({
-      totalVentes: Number(d.stats.total_ventes) || 0,
-      totalProduits: Number(d.stats.produits_vendus) || 0,
-      stockRestant: Number(d.stats.stock_restant) || 0,
-      paiementsEnAttente: Number(d.stats.paiements_en_attente) || 0,
-    });
-    setVentesRecentes((d.ventes_recentes || []).map((v: any) => ({
-      id: v.id, clienteNom: v.cliente_nom || 'Inconnue', vendeuseNom: v.vendeuse_nom || 'Inconnue',
-      total: Number(v.total) || 0, statut_paiement: v.statut_paiement,
-    })));
-    setTopVendeuses((d.top_vendeuses || []).map((v: any) => ({
-      id: v.id, nom: v.nom, nb: Number(v.nb) || 0, total: Number(v.total) || 0,
-    })));
+  const charger = async () => {
+    const [{ data: d }, { data: prods }, { count: nbFactures }, { count: aEncaisser }] = await Promise.all([
+      supabase.rpc('tableau_de_bord_admin'),
+      supabase.from('produits').select('id, nom, prix, stock_restant'),
+      supabase.from('ventes').select('*', { count: 'exact', head: true }).eq('annulee', false),
+      supabase.from('ventes').select('*', { count: 'exact', head: true }).eq('annulee', false).gt('reste_a_payer', 0),
+    ]);
+
+    const depuis = new Date(); depuis.setDate(depuis.getDate() - 13); depuis.setHours(0, 0, 0, 0);
+    const { data: v14 } = await supabase.from('ventes').select('total, date_vente').eq('annulee', false).gte('date_vente', depuis.toISOString());
+
+    const valeurStock = (prods || []).reduce((a: number, p: any) => a + Number(p.prix) * Number(p.stock_restant), 0);
+    const ruptures = (prods || []).filter((p: any) => p.stock_restant <= 0).length;
+    const alerts = (prods || []).filter((p: any) => p.stock_restant <= 5).sort((a: any, b: any) => a.stock_restant - b.stock_restant).slice(0, 5);
+
+    const jours: { key: string; jour: string; montant: number }[] = [];
+    for (let i = 13; i >= 0; i--) { const dte = new Date(); dte.setDate(dte.getDate() - i); jours.push({ key: dte.toISOString().slice(0, 10), jour: dte.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }), montant: 0 }); }
+    (v14 || []).forEach((v: any) => { const j = jours.find(x => x.key === String(v.date_vente).slice(0, 10)); if (j) j.montant += Number(v.total); });
+
+    setS({ ca: Number(d?.stats?.total_ventes || 0), factures: nbFactures || 0, recentes: (v14 || []).length, encours: Number(d?.stats?.paiements_en_attente || 0), aEncaisser: aEncaisser || 0, valeurStock, nbArticles: (prods || []).length, ruptures });
+    setAlertes(alerts);
+    setChart(jours);
+    setChargement(false);
   };
 
-  // Ancien calcul (repli). Rapatrie toutes les ventes dans le navigateur.
-  const chargerStatsFallback = async () => {
-    const { data: ventes } = await supabase.from('ventes').select('id, total, reste_a_payer, montant_paye, vendeuse_id, cliente_id, date_vente, statut_paiement').eq('annulee', false).order('date_vente', { ascending: false });
-    const venteIds = (ventes || []).map((v: any) => v.id);
-    const { data: venteProduits } = venteIds.length > 0 ? await supabase.from('vente_produits').select('quantite, vente_id').in('vente_id', venteIds) : { data: [] };
-    const { data: produits } = await supabase.from('produits').select('stock_restant');
-    const clienteIds = [...new Set((ventes || []).map((v: any) => v.cliente_id).filter(Boolean))];
-    const { data: clientes } = clienteIds.length > 0 ? await supabase.from('clientes').select('id, nom').in('id', clienteIds) : { data: [] };
-    const userIds = [...new Set((ventes || []).map((v: any) => v.vendeuse_id).filter(Boolean))];
-    const { data: utilisateurs } = userIds.length > 0 ? await supabase.from('utilisateurs').select('id, nom').in('id', userIds) : { data: [] };
-
-    setStats({
-      totalVentes: (ventes || []).reduce((s: number, v: any) => s + v.total, 0),
-      totalProduits: (venteProduits || []).reduce((s: number, vp: any) => s + vp.quantite, 0),
-      stockRestant: (produits || []).reduce((s: number, p: any) => s + p.stock_restant, 0),
-      paiementsEnAttente: (ventes || []).reduce((s: number, v: any) => s + v.reste_a_payer, 0),
-    });
-
-    const recentes = (ventes || []).slice(0, 5).map((v: any) => ({
-      ...v,
-      clienteNom: (clientes || []).find((c: any) => c.id === v.cliente_id)?.nom || 'Inconnue',
-      vendeuseNom: (utilisateurs || []).find((u: any) => u.id === v.vendeuse_id)?.nom || 'Inconnue',
-    }));
-    setVentesRecentes(recentes);
-
-    const vendeusesMap: any = {};
-    (ventes || []).forEach((v: any) => {
-      if (!v.vendeuse_id) return;
-      if (!vendeusesMap[v.vendeuse_id]) vendeusesMap[v.vendeuse_id] = { total: 0, nb: 0 };
-      vendeusesMap[v.vendeuse_id].total += v.total;
-      vendeusesMap[v.vendeuse_id].nb += 1;
-    });
-    const top = Object.entries(vendeusesMap)
-      .map(([id, s]: any) => ({ id: Number(id), ...s, nom: (utilisateurs || []).find((u: any) => u.id === Number(id))?.nom || 'Inconnue' }))
-      .sort((a: any, b: any) => b.total - a.total)
-      .slice(0, 3);
-    setTopVendeuses(top);
+  const CARTES = [
+    { icon: 'payments', label: "Chiffre d'affaires", value: fmt(s.ca), unit: 'FCFA', sub: 'Toutes les ventes', badge: 'Cumul', badgeColor: 'succes' },
+    { icon: 'receipt_long', label: 'Factures émises', value: s.factures.toString(), unit: 'docs', sub: 'Documents émis', badge: `+${s.recentes} récentes`, badgeColor: 'succes' },
+    { icon: 'hourglass_top', label: 'Encours client', value: fmt(s.encours), unit: 'FCFA', sub: 'Reste à payer', badge: `${s.aEncaisser} à encaisser`, badgeColor: 'warn' },
+    { icon: 'inventory', label: 'Valeur du stock', value: fmt(s.valeurStock), unit: 'FCFA', sub: `${s.nbArticles} articles référencés`, badge: s.ruptures > 0 ? `${s.ruptures} ruptures` : 'OK', badgeColor: s.ruptures > 0 ? 'danger' : 'succes' },
+  ];
+  const badgeStyle = (c: string): React.CSSProperties => {
+    const m: Record<string, [string, string]> = { succes: ['#1F9D6B', 'rgba(31,157,107,.12)'], warn: ['#C8891F', 'rgba(200,137,31,.14)'], danger: ['#D24444', 'rgba(210,68,68,.12)'] };
+    const [col, bg] = m[c] || m.succes;
+    return { fontSize: '12px', fontWeight: 700, color: col, background: bg, padding: '4px 10px', borderRadius: '20px', whiteSpace: 'nowrap' };
   };
 
-  const STATS_CARDS = [
-    { icon: 'payments', label: 'Total des ventes', value: stats.totalVentes.toLocaleString(), unit: 'FCFA', sub: 'Temps réel', subStyle: BADGE_UP },
-    { icon: 'shopping_bag', label: 'Produits vendus', value: stats.totalProduits.toString(), unit: 'unités', sub: 'En cours', subStyle: BADGE_UP },
-    { icon: 'inventory', label: 'Stock restant', value: stats.stockRestant.toString(), unit: 'articles', sub: 'En stock', subStyle: BADGE_WARN },
-    { icon: 'pending_actions', label: 'Paiements en attente', value: stats.paiementsEnAttente.toLocaleString(), unit: 'FCFA', sub: 'À encaisser', subStyle: BADGE_WARN },
-  ];
+  const maxChart = Math.max(1, ...chart.map(c => c.montant));
 
-  const medals = [
-    { color: '#B8912E', bg: 'rgba(184,145,46,.14)', border: 'rgba(184,145,46,.4)', icon: 'emoji_events' },
-    { color: '#8C9099', bg: 'rgba(140,144,153,.14)', border: 'rgba(140,144,153,.38)', icon: 'workspace_premium' },
-    { color: '#A5673B', bg: 'rgba(165,103,59,.15)', border: 'rgba(165,103,59,.38)', icon: 'military_tech' },
-  ];
+  const carte: React.CSSProperties = { background: '#fff', borderRadius: '18px', border: '1px solid #EAEEF5', boxShadow: '0 6px 20px rgba(26,36,56,.05)', padding: '22px' };
 
   return (
     <div className="fade-up">
-      {/* Stats cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(224px,1fr))', gap: '18px', marginBottom: '24px' }}>
-        {STATS_CARDS.map(s => (
-          <div key={s.label} style={{ padding: '22px', borderRadius: '20px', background: 'var(--surface)', border: '1px solid var(--accent-12)', backdropFilter: 'blur(20px)', boxShadow: 'var(--shadow-md)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-              <div style={{ width: '46px', height: '46px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-12)', border: '1px solid var(--accent-20)' }}>
-                <span className="ms" style={{ fontSize: '23px', color: 'var(--accent)' }}>{s.icon}</span>
+      {/* Cartes de stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(224px,1fr))', gap: '18px', marginBottom: '20px' }}>
+        {CARTES.map(c => (
+          <div key={c.label} style={carte}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '13px', background: '#EEF3FC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span className="ms" style={{ fontSize: '23px', color: '#2563EB' }}>{c.icon}</span>
               </div>
-              <span style={s.subStyle}>{s.sub}</span>
+              <span style={badgeStyle(c.badgeColor)}>{c.badge}</span>
             </div>
-            <div style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '.4px', color: 'var(--ink-55)', textTransform: 'uppercase' }}>{s.label}</div>
-            <div style={{ marginTop: '6px', display: 'flex', alignItems: 'baseline', gap: '7px' }}>
-              <span style={{ fontSize: '28px', fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.5px' }}>{s.value}</span>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent)' }}>{s.unit}</span>
+            <div style={{ fontSize: '11.5px', fontWeight: 600, letterSpacing: '.5px', color: '#8A94A6', textTransform: 'uppercase' }}>{c.label}</div>
+            <div style={{ marginTop: '5px', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+              <span style={{ fontSize: '27px', fontWeight: 800, color: '#1A2438', letterSpacing: '-.5px' }}>{c.value}</span>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#2563EB' }}>{c.unit}</span>
             </div>
+            <div style={{ fontSize: '12.5px', color: '#9AA3B2', marginTop: '6px' }}>{c.sub}</div>
           </div>
         ))}
       </div>
 
-      {/* Bottom panels */}
+      {/* Graphique + alertes */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: '18px' }}>
-        {/* Ventes récentes */}
-        <div style={{ padding: '24px', borderRadius: '20px', background: 'var(--surface)', border: '1px solid var(--line)', backdropFilter: 'blur(20px)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)' }}>Ventes récentes</div>
-            <a href="/admin/ventes" style={{ fontSize: '13px', color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Tout voir</a>
+        {/* Encaissements */}
+        <div style={{ ...carte, gridColumn: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <div>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: '#1A2438' }}>Encaissements</div>
+              <div style={{ fontSize: '12.5px', color: '#9AA3B2', marginTop: '2px' }}>14 derniers jours · en FCFA</div>
+            </div>
+            <div style={{ display: 'flex', gap: '2px', background: '#F1F4FA', borderRadius: '10px', padding: '3px' }}>
+              {['14 j', '30 j', 'Année'].map((t, i) => (
+                <span key={t} style={{ fontSize: '12px', fontWeight: 600, padding: '6px 12px', borderRadius: '8px', color: i === 0 ? '#2563EB' : '#8A94A6', background: i === 0 ? '#fff' : 'transparent', boxShadow: i === 0 ? '0 1px 3px rgba(26,36,56,.1)' : 'none' }}>{t}</span>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {ventesRecentes.length === 0 ? (
-              <p style={{ color: 'var(--ink-45)', fontSize: '13px', textAlign: 'center', padding: '20px 0' }}>Aucune vente pour le moment.</p>
-            ) : ventesRecentes.map(v => (
-              <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '11px 8px', borderRadius: '12px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '11px', background: 'var(--avatar)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--accent-16)', flexShrink: 0 }}>
-                  <span style={{ fontFamily: "var(--font-cormorant), serif", fontSize: '16px', color: 'var(--accent)', fontWeight: 600 }}>{v.clienteNom[0]}</span>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.clienteNom}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--ink-45)' }}>{v.vendeuseNom}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--ink)' }}>{v.total?.toLocaleString()}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--ink-45)' }}>FCFA</div>
-                </div>
-                <span style={v.statut_paiement === 'paye' ? BADGE_PAID : BADGE_PART}>{v.statut_paiement === 'paye' ? 'Payé' : 'Partiel'}</span>
-              </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '180px' }}>
+            {chart.map((c, i) => (
+              <div key={c.key} title={`${c.jour} : ${fmt(c.montant)} FCFA`} style={{ flex: 1, height: `${Math.max(4, (c.montant / maxChart) * 100)}%`, background: i === chart.length - 1 ? '#2563EB' : '#DCE7FB', borderRadius: '6px 6px 3px 3px', minHeight: '4px', transition: 'height .3s' }} />
             ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '11px', color: '#A5AEBD' }}>
+            <span>{chart[0]?.jour}</span><span>{chart[Math.floor(chart.length / 2)]?.jour}</span><span>{chart[chart.length - 1]?.jour}</span>
           </div>
         </div>
 
-        {/* Top vendeuses */}
-        <div style={{ padding: '24px', borderRadius: '20px', background: 'var(--surface)', border: '1px solid var(--line)', backdropFilter: 'blur(20px)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)' }}>Meilleures vendeuses</div>
-            <a href="/admin/vendeuses" style={{ fontSize: '13px', color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Classement</a>
+        {/* Alertes de stock */}
+        <div style={carte}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#1A2438' }}>Alertes de stock</div>
+            <a href="/admin/produits" style={{ fontSize: '13px', color: '#2563EB', fontWeight: 600, textDecoration: 'none' }}>Réapprovisionner</a>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {topVendeuses.length === 0 ? (
-              <p style={{ color: 'var(--ink-45)', fontSize: '13px', textAlign: 'center', padding: '20px 0' }}>Aucune donnée.</p>
-            ) : topVendeuses.map((v, i) => {
-              const m = medals[i] || medals[2];
-              return (
-                <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '11px 8px', borderRadius: '12px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.bg, border: `1px solid ${m.border}` }}>
-                    <span className="ms" style={{ fontSize: '18px', color: m.color }}>{m.icon}</span>
+          {chargement ? (
+            <p style={{ color: '#9AA3B2', fontSize: '13px', textAlign: 'center', padding: '20px 0' }}>Chargement…</p>
+          ) : alertes.length === 0 ? (
+            <p style={{ color: '#9AA3B2', fontSize: '13px', textAlign: 'center', padding: '20px 0' }}>Aucune alerte — stock au vert ✅</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {alertes.map(p => {
+                const epuise = p.stock_restant <= 0;
+                const col = epuise ? '#D24444' : '#C8891F';
+                const bg = epuise ? 'rgba(210,68,68,.10)' : 'rgba(200,137,31,.12)';
+                return (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 6px' }}>
+                    <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span className="ms" style={{ fontSize: '20px', color: col }}>{epuise ? 'error' : 'warning'}</span>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#1A2438', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nom}</div>
+                      <div style={{ fontSize: '11.5px', color: '#A5AEBD' }}>Réf. #{p.id}</div>
+                    </div>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: col, background: bg, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap' }}>{epuise ? 'Épuisé' : `${p.stock_restant} restant${p.stock_restant > 1 ? 's' : ''}`}</span>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>{v.nom}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--ink-45)' }}>{v.nb} vente{v.nb > 1 ? 's' : ''}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent)' }}>{v.total.toLocaleString()}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--ink-45)' }}>FCFA</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

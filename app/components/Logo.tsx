@@ -17,7 +17,7 @@ export function FalloraMark({ size = 40, tone = 'accent' }: { size?: number; ton
       ? ['#FBF3E6', '#EAD3B4']
       : tone === 'ink'
         ? ['#5C3A26', '#3E2C20']
-        : ['#6E4128', '#C08552']; // terracotta (défaut, comme le logo)
+        : ['#1D4FD0', '#4B7DF5']; // bleu (accent Fallik)
 
   return (
     <svg width={size} height={size * 1.18} viewBox="0 0 80 94" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -36,7 +36,7 @@ export function FalloraMark({ size = 40, tone = 'accent' }: { size?: number; ton
         <path d="M32 51 C35 49 39 49 43 51" strokeWidth="1.8" />
       </g>
       {/* Lèvres — touche terracotta plus chaude */}
-      <path d="M24 66 C27 64 30 65 29 68" stroke="#B9764A" strokeWidth="2" strokeLinecap="round" fill="none" />
+      <path d="M24 66 C27 64 30 65 29 68" stroke="#3E6FE0" strokeWidth="2" strokeLinecap="round" fill="none" />
     </svg>
   );
 }
@@ -96,7 +96,7 @@ export function FalloraLogo({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, #F6EEDF, #ECE0CC)',
+          background: 'linear-gradient(135deg, #E9F0FD, #D8E5FA)',
           border: '1px solid var(--accent-25)',
           boxShadow: 'var(--shadow-md)',
           flexShrink: 0,

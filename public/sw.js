@@ -9,7 +9,7 @@
  *
  * Bump CACHE pour invalider l'ancien cache lors d'une mise a jour.
  */
-const CACHE = 'fallora-v1';
+const CACHE = 'fallik-v1';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
