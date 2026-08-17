@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const admin = clientAdmin();
     const { data: v } = await admin
       .from('ventes')
-      .select('total, statut_paiement, cliente_id, vendeuse_id')
+      .select('total, statut_paiement, cliente_id, vendeuse_id, organisation_id')
       .eq('id', venteId)
       .single();
 
@@ -58,6 +58,7 @@ export async function POST(request: Request) {
         v.vendeuse_id ? admin.from('utilisateurs').select('nom').eq('id', v.vendeuse_id).single() : Promise.resolve({ data: null }),
       ]);
       await notifierVente({
+        organisationId: Number(v.organisation_id),
         vendeuse: (ven as any)?.nom || 'Une vendeuse',
         cliente: (cli as any)?.nom || 'Cliente',
         total: Number(v.total) || 0,

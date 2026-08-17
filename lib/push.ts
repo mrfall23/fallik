@@ -27,17 +27,23 @@ function clientAdmin() {
   );
 }
 
-type InfosVente = { vendeuse: string; cliente: string; total: number; statut: string };
+type InfosVente = { organisationId: number; vendeuse: string; cliente: string; total: number; statut: string };
 
-/** Notifie tous les appareils admin abonnes. Best-effort : n'echoue jamais bruyamment. */
+/**
+ * Notifie les appareils admin abonnes DE LA MEME BOUTIQUE que la vente.
+ * Multi-tenant : on filtre strictement par organisation_id, donc un admin
+ * ne recoit jamais les ventes d'une autre boutique. Best-effort.
+ */
 export async function notifierVente(v: InfosVente) {
   if (!process.env.VAPID_PRIVATE_KEY) return; // pas de cle privee -> notifications desactivees
+  if (!v.organisationId) return; // pas d'organisation -> on ne notifie personne (securite)
   configurer();
 
   const admin = clientAdmin();
   const { data: abos } = await admin
     .from('push_subscriptions')
-    .select('id, endpoint, p256dh, auth');
+    .select('id, endpoint, p256dh, auth')
+    .eq('organisation_id', v.organisationId);
 
   if (!abos || abos.length === 0) return;
 

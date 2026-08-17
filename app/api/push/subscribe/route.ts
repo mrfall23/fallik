@@ -13,23 +13,23 @@ function clientAdmin() {
   );
 }
 
-// Renvoie l'id de profil si l'appelant est un admin actif, sinon null.
-async function adminProfilId(): Promise<number | null> {
+// Renvoie { id, organisationId } si l'appelant est un admin actif, sinon null.
+async function adminProfil(): Promise<{ id: number; organisationId: number } | null> {
   const supabase = await creerClientServeur();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   const { data: profil } = await supabase
     .from('utilisateurs')
-    .select('id, role, actif')
+    .select('id, role, actif, organisation_id')
     .eq('auth_id', user.id)
     .single();
   if (!profil || !profil.actif || profil.role !== 'admin') return null;
-  return profil.id as number;
+  return { id: profil.id as number, organisationId: profil.organisation_id as number };
 }
 
 export async function POST(request: Request) {
-  const utilisateurId = await adminProfilId();
-  if (!utilisateurId) return NextResponse.json({ message: 'Acces refuse.' }, { status: 403 });
+  const profil = await adminProfil();
+  if (!profil) return NextResponse.json({ message: 'Acces refuse.' }, { status: 403 });
 
   const sub = await request.json().catch(() => null);
   const endpoint = sub?.endpoint;
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
   const admin = clientAdmin();
   const { error } = await admin.from('push_subscriptions').upsert(
-    { utilisateur_id: utilisateurId, endpoint, p256dh, auth },
+    { utilisateur_id: profil.id, organisation_id: profil.organisationId, endpoint, p256dh, auth },
     { onConflict: 'endpoint' },
   );
   if (error) return NextResponse.json({ message: 'Erreur enregistrement.' }, { status: 500 });
@@ -50,8 +50,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const utilisateurId = await adminProfilId();
-  if (!utilisateurId) return NextResponse.json({ message: 'Acces refuse.' }, { status: 403 });
+  const profil = await adminProfil();
+  if (!profil) return NextResponse.json({ message: 'Acces refuse.' }, { status: 403 });
 
   const { endpoint } = await request.json().catch(() => ({}));
   if (endpoint) {
