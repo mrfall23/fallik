@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useUtilisateur, seDeconnecter } from '@/lib/utilisateur';
 import { useIsMobile } from '../components/useMediaQuery';
+import PushToggle from '../components/PushToggle';
 
 const NAV = [
   { href: '/admin', icon: 'space_dashboard', label: 'Tableau de bord' },
@@ -78,8 +79,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <span className="ms" style={{ fontSize: '21px', color: '#9AA3B2' }}>point_of_sale</span>Espace vendeuse
         </button>
 
-        {/* Profil / déconnexion */}
-        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '11px', padding: '12px', borderRadius: '14px', background: '#F4F6FB', border: '1px solid #EAEEF5' }}>
+        {/* Notifications + Profil / déconnexion */}
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <PushToggle />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '11px', padding: '12px', borderRadius: '14px', background: '#F4F6FB', border: '1px solid #EAEEF5' }}>
           <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, flexShrink: 0 }}>{initial}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1A2438', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.nom}</div>
@@ -88,12 +91,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <button onClick={seDeconnecter} title="Déconnexion" aria-label="Se déconnecter" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', color: '#8A94A6' }}>
             <span className="ms" style={{ fontSize: '20px' }}>logout</span>
           </button>
+          </div>
         </div>
       </aside>
 
       {/* ── MAIN ── */}
       <main style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <header style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', gap: '16px', padding: isMobile ? '14px 16px' : '20px 32px', background: 'var(--header-bg)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--line)' }}>
+        <header style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', gap: '16px', padding: isMobile ? '14px 16px' : '20px 32px', background: '#fff', borderBottom: '1px solid #EAEEF5' }}>
           {isMobile && (
             <button onClick={() => setMenuOuvert(true)} aria-label="Menu" style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: '11px', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
               <span className="ms" style={{ fontSize: '24px', color: '#1A2438' }}>menu</span>

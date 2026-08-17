@@ -3,4 +3,4 @@
 // ca evite une variable d'environnement cote build. Seule la cle PRIVEE
 // (VAPID_PRIVATE_KEY) reste un secret, cote serveur uniquement.
 export const VAPID_PUBLIC_KEY =
-  'BOQ4fgDjVYXcKwl-Rm8sZ6xwNfqzEnVYQLoi-fIxAJN4iJW8pvMLqoOqaabLGAxUv0k-OKKJkv8bGlxgK-Ly3Gc';
+  'BD_IAAV4pMyyrsZevns7-rMXmm4q-iAg_3VxzYfcq-QzmnmCQ_lfUlQp1S8JF0fKkl4ZEhjQ3zFdYHyWXsSaJZU';

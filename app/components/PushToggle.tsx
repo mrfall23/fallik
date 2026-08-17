@@ -82,13 +82,13 @@ export default function PushToggle() {
   const base: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 14px',
     borderRadius: '14px', fontSize: '13px', fontWeight: 600, width: '100%',
-    border: '1px solid var(--line)', textAlign: 'left',
+    border: '1px solid #EAEEF5', textAlign: 'left',
   };
 
   if (etat === 'refuse') {
     return (
-      <div style={{ ...base, background: 'var(--surface)', color: 'var(--ink-55)', cursor: 'default' }}>
-        <span className="ms" style={{ fontSize: '19px', color: 'var(--ink-45)' }}>notifications_off</span>
+      <div style={{ ...base, background: '#fff', color: '#5A6472', cursor: 'default' }}>
+        <span className="ms" style={{ fontSize: '19px', color: '#9AA3B2' }}>notifications_off</span>
         <span style={{ fontSize: '12px', lineHeight: 1.35 }}>Notifications bloquées. Autorise-les dans les réglages du navigateur.</span>
       </div>
     );
@@ -97,7 +97,7 @@ export default function PushToggle() {
   if (etat === 'actif') {
     return (
       <button onClick={desactiver} disabled={occupe} title="Désactiver les notifications de vente"
-        style={{ ...base, cursor: occupe ? 'wait' : 'pointer', background: 'var(--success-tint)', borderColor: 'var(--success-line)', color: 'var(--success)' }}>
+        style={{ ...base, cursor: occupe ? 'wait' : 'pointer', background: 'rgba(31,157,107,.12)', borderColor: 'rgba(31,157,107,.28)', color: '#1F9D6B' }}>
         <span className="ms" style={{ fontSize: '19px' }}>notifications_active</span>
         <span style={{ flex: 1 }}>Notifications actives</span>
         <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.8 }}>désactiver</span>
@@ -108,8 +108,8 @@ export default function PushToggle() {
   // inactif
   return (
     <button onClick={activer} disabled={occupe}
-      style={{ ...base, cursor: occupe ? 'wait' : 'pointer', background: 'var(--accent-12)', borderColor: 'var(--accent-25)', color: 'var(--accent-deep)' }}>
-      <span className="ms" style={{ fontSize: '19px', color: 'var(--accent)' }}>notifications</span>
+      style={{ ...base, cursor: occupe ? 'wait' : 'pointer', background: '#EEF3FC', borderColor: 'rgba(37,99,235,.25)', color: '#1D4FD0' }}>
+      <span className="ms" style={{ fontSize: '19px', color: '#2563EB' }}>notifications</span>
       <span>{occupe ? 'Activation…' : 'Activer les notifications'}</span>
     </button>
   );
