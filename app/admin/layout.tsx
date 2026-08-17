@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useUtilisateur, seDeconnecter } from '@/lib/utilisateur';
 import { useIsMobile } from '../components/useMediaQuery';
 import PushToggle from '../components/PushToggle';
+import { FallikLogo } from '../components/Logo';
 
 const NAV = [
   { href: '/admin', icon: 'space_dashboard', label: 'Tableau de bord' },
@@ -51,9 +52,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside style={asideStyle}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '11px', padding: '4px 8px 22px' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px rgba(37,99,235,.28)' }}>
-            <span className="ms" style={{ fontSize: '23px', color: '#fff' }}>inventory_2</span>
-          </div>
+          <FallikLogo size={40} shadow />
           <div>
             <div style={{ fontSize: '17px', fontWeight: 800, color: '#1A2438', lineHeight: 1 }}>Fallik</div>
             <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '1.3px', color: '#9AA3B2', marginTop: '3px' }}>STOCK &amp; FACTURATION</div>

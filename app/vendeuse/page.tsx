@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useUtilisateur, seDeconnecter } from '@/lib/utilisateur';
 import { useIsMobile } from '../components/useMediaQuery';
+import { FallikLogo } from '../components/Logo';
 import VenteRapide from './VenteRapide';
 import FactureDetail from './FactureDetail';
 
@@ -66,9 +67,7 @@ export default function VendeusePage() {
       {/* Header */}
       <header style={{ position: 'sticky', top: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: isMobile ? '12px 16px' : '14px 28px', background: '#fff', borderBottom: `1px solid ${LINE}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: GRAD, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 14px rgba(37,99,235,.3)', flexShrink: 0 }}>
-            <span className="ms" style={{ fontSize: '22px', color: '#fff' }}>inventory_2</span>
-          </div>
+          <FallikLogo size={40} shadow />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '17px', fontWeight: 800, color: INK, lineHeight: 1 }}>Fallik</div>
             <div style={{ fontSize: '11.5px', fontWeight: 600, color: MUTE, marginTop: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{boutiqueNom}</div>

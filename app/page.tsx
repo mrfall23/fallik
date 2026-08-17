@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useIsMobile } from './components/useMediaQuery';
+import { FallikLogo } from './components/Logo';
 
 type Mode = 'connexion' | 'inscription';
 
@@ -59,9 +60,7 @@ export default function AccueilPage() {
         <div style={{ width: '100%', maxWidth: '380px' }}>
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '38px' }}>
-            <div style={{ width: '46px', height: '46px', borderRadius: '13px', background: 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(37,99,235,.3)' }}>
-              <span className="ms" style={{ fontSize: '26px', color: '#fff' }}>inventory_2</span>
-            </div>
+            <FallikLogo size={46} shadow />
             <div>
               <div style={{ fontSize: '19px', fontWeight: 800, color: '#1A2438', lineHeight: 1 }}>Fallik</div>
               <div style={{ fontSize: '10.5px', fontWeight: 700, letterSpacing: '1.5px', color: '#8A94A6', marginTop: '3px' }}>STOCK &amp; FACTURATION</div>

@@ -1,4 +1,4 @@
-import { FalloraMark } from './Logo';
+import { FallikLogo } from './Logo';
 
 // Reçu / facture d'une vente. Composant purement visuel : il est affiche a
 // l'ecran ET capture en image (html-to-image) pour l'envoi WhatsApp.
@@ -32,7 +32,7 @@ export default function Recu({ data }: { data: RecuData }) {
     <div style={{ width: '360px', background: '#FCFDFF', color: '#1A2438', fontFamily: "'Manrope', system-ui, sans-serif", padding: '26px 24px 22px', boxSizing: 'border-box' }}>
       {/* En-tete : logo + boutique */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px', paddingBottom: '18px', borderBottom: '1.5px solid rgba(26,36,56,.18)' }}>
-        <FalloraMark size={44} />
+        <FallikLogo size={44} />
         <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: '30px', fontWeight: 600, letterSpacing: '1px', lineHeight: 1, color: '#1A2438' }}>{data.boutique}</div>
         <div style={{ fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', color: '#2563EB', fontWeight: 600 }}>Reçu d'achat</div>
       </div>
