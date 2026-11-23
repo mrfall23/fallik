@@ -223,9 +223,17 @@ try {
   console.error('\n!! Erreur :', e.message);
 } finally {
   // ── Nettoyage ── (cascade : comptes, produits, ventes, factures, abonnements)
-  for (const id of jetables.orgs) await service.from('organisations').delete().eq('id', id);
-  for (const id of jetables.auth) await service.auth.admin.deleteUser(id);
-  console.log(`\nNettoyage : ${jetables.orgs.length} boutique(s) et ${jetables.auth.length} compte(s) de test supprimes.`);
+  let restes = 0;
+  for (const id of jetables.orgs) {
+    const { error } = await service.from('organisations').delete().eq('id', id);
+    if (error) { restes++; console.log(`   !! boutique de test ${id} non supprimee : ${error.message}`); }
+  }
+  for (const id of jetables.auth) {
+    const { error } = await service.auth.admin.deleteUser(id);
+    if (error) { restes++; console.log(`   !! compte de test ${id} non supprime : ${error.message}`); }
+  }
+  if (restes) echecs.push(`Nettoyage incomplet : ${restes} element(s) de test restent en base`);
+  console.log(`\nNettoyage : ${jetables.orgs.length} boutique(s) et ${jetables.auth.length} compte(s) de test traites, ${restes} echec(s).`);
 }
 
 console.log(`\n══ Resultat : ${reussis}/${total} controles reussis ══`);
