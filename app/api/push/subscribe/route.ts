@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { creerClientServeur } from '@/lib/supabase-server';
+import { accesGestion } from '@/lib/acces-serveur';
 
 // Enregistre / supprime l'abonnement Web Push de l'admin.
 // Reserve a l'admin : c'est la seule personne censee recevoir les alertes.
@@ -15,16 +15,9 @@ function clientAdmin() {
 
 // Renvoie { id, organisationId } si l'appelant est un admin actif, sinon null.
 async function adminProfil(): Promise<{ id: number; organisationId: number } | null> {
-  const supabase = await creerClientServeur();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: profil } = await supabase
-    .from('utilisateurs')
-    .select('id, role, actif, organisation_id')
-    .eq('auth_id', user.id)
-    .single();
-  if (!profil || !profil.actif || profil.role !== 'admin') return null;
-  return { id: profil.id as number, organisationId: profil.organisation_id as number };
+  const acces = await accesGestion();
+  if (!acces) return null;
+  return { id: acces.utilisateur_id, organisationId: acces.organisation_id };
 }
 
 export async function POST(request: Request) {

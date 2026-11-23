@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useBoutique, SEUIL_STOCK_BAS_DEFAUT } from '@/lib/boutique';
 
 type Produit = { id: number; nom: string; prix: number; description: string; stock_restant: number; stock_initial: number; image: string | null };
 const FORM_VIDE: Omit<Produit, 'id'> = { nom: '', prix: 0, description: '', stock_restant: 0, stock_initial: 0, image: null };
@@ -16,6 +17,7 @@ const th: React.CSSProperties = { fontSize: '11.5px', fontWeight: 700, letterSpa
 const td: React.CSSProperties = { padding: '13px 20px', borderBottom: '1px solid #F1F4FA', verticalAlign: 'middle' };
 
 export default function AdminProduits() {
+  const boutique = useBoutique();
   const [produits, setProduits] = useState<Produit[]>([]);
   const [chargement, setChargement] = useState(true);
   const [q, setQ] = useState('');
@@ -58,7 +60,7 @@ export default function AdminProduits() {
 
   const badge = (p: Produit): { text: string; col: string; bg: string } => {
     if (p.stock_restant <= 0) return { text: 'Épuisé', col: '#D24444', bg: 'rgba(210,68,68,.10)' };
-    if (p.stock_restant <= 5) return { text: `${p.stock_restant} en stock`, col: '#C8891F', bg: 'rgba(200,137,31,.14)' };
+    if (p.stock_restant <= (boutique?.seuil_stock_bas ?? SEUIL_STOCK_BAS_DEFAUT)) return { text: `${p.stock_restant} en stock`, col: '#C8891F', bg: 'rgba(200,137,31,.14)' };
     return { text: `${p.stock_restant} en stock`, col: '#1F9D6B', bg: 'rgba(31,157,107,.12)' };
   };
 

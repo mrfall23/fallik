@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { lireBoutique, SEUIL_STOCK_BAS_DEFAUT } from '@/lib/boutique';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const INK = '#1A2438', BLUE = '#2563EB', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
@@ -63,12 +64,14 @@ export default function Dashboard() {
   }, []);
 
   const charger = async () => {
-    const [{ data: d }, { data: prods }, { data: ventes }, { count: nbClients }] = await Promise.all([
+    const [{ data: d }, { data: prods }, { data: ventes }, { count: nbClients }, boutique] = await Promise.all([
       supabase.rpc('tableau_de_bord_admin'),
       supabase.from('produits').select('id, nom, prix, stock_restant'),
       supabase.from('ventes').select('id, total, montant_paye, reste_a_payer, statut_paiement, date_vente').eq('annulee', false),
       supabase.from('clientes').select('*', { count: 'exact', head: true }),
+      lireBoutique(),
     ]);
+    const seuil = boutique?.seuil_stock_bas ?? SEUIL_STOCK_BAS_DEFAUT;
 
     const vv = ventes || [];
     const venteIds = vv.map((v: any) => v.id);
@@ -82,7 +85,7 @@ export default function Dashboard() {
     // Stock
     const valeurStock = (prods || []).reduce((a: number, p: any) => a + Number(p.prix) * Number(p.stock_restant), 0);
     const ruptures = (prods || []).filter((p: any) => p.stock_restant <= 0).length;
-    const alerts = (prods || []).filter((p: any) => p.stock_restant <= 5).sort((a: any, b: any) => a.stock_restant - b.stock_restant).slice(0, 5);
+    const alerts = (prods || []).filter((p: any) => p.stock_restant <= seuil).sort((a: any, b: any) => a.stock_restant - b.stock_restant).slice(0, 5);
     const nomProduit: Record<number, string> = {};
     (prods || []).forEach((p: any) => { nomProduit[p.id] = p.nom; });
 

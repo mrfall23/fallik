@@ -5,6 +5,7 @@ import { useUtilisateur, seDeconnecter } from '@/lib/utilisateur';
 import { useIsMobile } from '../components/useMediaQuery';
 import PushToggle from '../components/PushToggle';
 import { FallikLogo } from '../components/Logo';
+import { LIBELLES_ROLE } from '@/lib/roles';
 
 const NAV = [
   { href: '/admin', icon: 'space_dashboard', label: 'Tableau de bord' },
@@ -23,11 +24,11 @@ const TITRES: Record<string, [string, string]> = {
   '/admin/vendeuses': ['Vendeuses', 'Performance et classement'],
   '/admin/clients': ['Clients', 'Profils et historique des achats'],
   '/admin/rapports': ['Rapports', 'Exports Excel de votre activité'],
-  '/admin/parametres': ['Paramètres', 'Comptes et réglages'],
+  '/admin/parametres': ['Paramètres', 'Boutique, abonnement et comptes'],
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { utilisateur: user } = useUtilisateur('admin');
+  const { utilisateur: user, acces } = useUtilisateur('admin');
   const router = useRouter();
   const pathname = usePathname();
   const isMobile = useIsMobile();
@@ -85,7 +86,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, flexShrink: 0 }}>{initial}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1A2438', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.nom}</div>
-            <div style={{ fontSize: '11.5px', color: '#8A94A6' }}>Administratrice</div>
+            <div style={{ fontSize: '11.5px', color: '#8A94A6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{LIBELLES_ROLE[user.role] || user.role}{acces?.organisation ? ` · ${acces.organisation}` : ''}</div>
           </div>
           <button onClick={seDeconnecter} title="Déconnexion" aria-label="Se déconnecter" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', color: '#8A94A6' }}>
             <span className="ms" style={{ fontSize: '20px' }}>logout</span>

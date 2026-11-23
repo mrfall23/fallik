@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { creerClientServeur } from '@/lib/supabase-server';
+import { accesGestion } from '@/lib/acces-serveur';
 
 // Creation et modification des comptes vendeuses (multi-boutiques).
 //
@@ -16,22 +16,14 @@ function clientAdmin() {
   );
 }
 
-/** Renvoie l'organisation de l'appelant s'il est admin actif, sinon une reponse d'erreur. */
+/**
+ * Renvoie l'organisation de l'appelant s'il est proprietaire/admin actif d'une
+ * boutique ACCESSIBLE (abonnement valide), sinon une reponse d'erreur.
+ */
 async function adminOrg(): Promise<{ orgId: number } | { erreur: NextResponse }> {
-  const supabase = await creerClientServeur();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { erreur: NextResponse.json({ message: 'Non authentifié.' }, { status: 401 }) };
-
-  const { data: profil } = await supabase
-    .from('utilisateurs')
-    .select('role, actif, organisation_id')
-    .eq('auth_id', user.id)
-    .single();
-
-  if (!profil || !profil.actif || profil.role !== 'admin') {
-    return { erreur: NextResponse.json({ message: 'Accès refusé.' }, { status: 403 }) };
-  }
-  return { orgId: profil.organisation_id as number };
+  const acces = await accesGestion();
+  if (!acces) return { erreur: NextResponse.json({ message: 'Accès refusé.' }, { status: 403 }) };
+  return { orgId: acces.organisation_id };
 }
 
 export async function POST(request: Request) {

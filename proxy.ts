@@ -55,13 +55,14 @@ export async function proxy(request: NextRequest) {
     return r;
   };
 
-  if (pathname.startsWith('/admin') && role !== 'admin') return rediriger('/');
-  if (pathname.startsWith('/vendeuse') && !user) return rediriger('/');
-  if (pathname === '/' && user) return rediriger(role === 'admin' ? '/admin' : '/vendeuse');
+  const gestion = role === 'admin' || role === 'proprietaire';
+  if (pathname.startsWith('/admin') && !gestion) return rediriger('/');
+  if ((pathname.startsWith('/vendeuse') || pathname.startsWith('/abonnement')) && !user) return rediriger('/');
+  if (pathname === '/' && user) return rediriger(gestion ? '/admin' : '/vendeuse');
 
   return response;
 }
 
 export const config = {
-  matcher: ['/', '/admin/:path*', '/vendeuse/:path*'],
+  matcher: ['/', '/admin/:path*', '/vendeuse/:path*', '/abonnement'],
 };

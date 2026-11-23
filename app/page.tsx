@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useIsMobile } from './components/useMediaQuery';
 import { FallikLogo } from './components/Logo';
+import { accueilPourRole } from '@/lib/roles';
 
 type Mode = 'connexion' | 'inscription';
 
@@ -18,6 +19,7 @@ export default function AccueilPage() {
   const [voirMdp, setVoirMdp] = useState(false);
   const [nomBoutique, setNomBoutique] = useState('');
   const [nom, setNom] = useState('');
+  const [siteWeb, setSiteWeb] = useState(''); // champ piege anti-robots, invisible
   const [erreur, setErreur] = useState('');
   const [chargement, setChargement] = useState(false);
   const router = useRouter();
@@ -28,7 +30,7 @@ export default function AccueilPage() {
     const { data: profil } = await supabase.from('utilisateurs').select('role, actif').eq('auth_id', auth.user.id).single();
     if (!profil) { await supabase.auth.signOut(); return { ok: false, message: 'Compte introuvable.' }; }
     if (!profil.actif) { await supabase.auth.signOut(); return { ok: false, message: 'Ce compte a été désactivé.' }; }
-    router.replace(profil.role === 'admin' ? '/admin' : '/vendeuse');
+    router.replace(accueilPourRole(profil.role));
     return { ok: true as const };
   };
 
@@ -41,9 +43,9 @@ export default function AccueilPage() {
 
   const sInscrire = async () => {
     if (!nomBoutique.trim() || !nom.trim() || !email || !motDePasse) { setErreur('Veuillez remplir tous les champs.'); return; }
-    if (motDePasse.length < 6) { setErreur('Le mot de passe doit faire au moins 6 caractères.'); return; }
+    if (motDePasse.length < 8) { setErreur('Le mot de passe doit faire au moins 8 caractères.'); return; }
     setErreur(''); setChargement(true);
-    const reponse = await fetch('/api/inscription', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nomBoutique, nom, email, motDePasse }) });
+    const reponse = await fetch('/api/inscription', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nomBoutique, nom, email, motDePasse, siteWeb }) });
     const resultat = await reponse.json().catch(() => ({}));
     if (!reponse.ok) { setChargement(false); setErreur(resultat.message || 'Une erreur est survenue.'); return; }
     const r = await connecter(email, motDePasse);
@@ -82,6 +84,9 @@ export default function AccueilPage() {
                 <label style={labelStyle}>Votre nom</label>
                 <input style={champStyle} placeholder="Votre nom" value={nom} onChange={e => setNom(e.target.value)} onKeyDown={surEntree} />
               </div>
+              <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: '1px', height: '1px', overflow: 'hidden' }}>
+                <label>Site web<input tabIndex={-1} autoComplete="off" value={siteWeb} onChange={e => setSiteWeb(e.target.value)} /></label>
+              </div>
             </>
           )}
 
@@ -93,7 +98,7 @@ export default function AccueilPage() {
           <div style={{ marginBottom: '16px' }}>
             <label style={labelStyle}>Mot de passe</label>
             <div style={{ position: 'relative' }}>
-              <input style={{ ...champStyle, paddingRight: '46px' }} type={voirMdp ? 'text' : 'password'} placeholder={mode === 'inscription' ? '6 caractères minimum' : '••••••••'} value={motDePasse} onChange={e => setMotDePasse(e.target.value)} onKeyDown={surEntree} />
+              <input style={{ ...champStyle, paddingRight: '46px' }} type={voirMdp ? 'text' : 'password'} placeholder={mode === 'inscription' ? '8 caractères minimum' : '••••••••'} value={motDePasse} onChange={e => setMotDePasse(e.target.value)} onKeyDown={surEntree} />
               <button type="button" onClick={() => setVoirMdp(v => !v)} aria-label="Afficher le mot de passe" style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', width: '38px', height: '38px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#8A94A6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span className="ms" style={{ fontSize: '20px' }}>{voirMdp ? 'visibility_off' : 'visibility'}</span>
               </button>

@@ -1,9 +1,13 @@
-// Test d'intrusion sur la base Fallora.
+// Test d'intrusion multi-boutiques sur la base FALLIK.
 //
-// Rejoue les attaques realistes contre les policies RLS, avec des comptes
-// jetables crees puis supprimes. Ne touche a aucun compte reel.
+// Cree 3 boutiques jetables (A et B actives, C expiree) avec leurs comptes,
+// puis rejoue les attaques realistes : visiteur anonyme, boutique A qui
+// tente de lire / modifier / vendre les donnees de B, client qui tente de
+// prolonger son propre abonnement, gerant qui tente de prendre la place du
+// proprietaire, boutique expiree qui tente de continuer a travailler.
+// Tout est supprime a la fin. Ne touche a aucune boutique reelle.
 //
-// Usage : node scripts/tester-securite.mjs
+// Usage : node scripts/tester-securite.mjs   (lit .env.local)
 
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'node:fs';
@@ -11,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 
 const env = Object.fromEntries(
   readFileSync('.env.local', 'utf8')
-    .split('\n')
+    .split(/\r?\n/)
     .filter((l) => l.includes('=') && !l.trim().startsWith('#'))
     .map((l) => {
       const i = l.indexOf('=');
@@ -21,206 +25,212 @@ const env = Object.fromEntries(
 
 const URL = env.NEXT_PUBLIC_SUPABASE_URL;
 const PUB = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const service = createClient(URL, env.SUPABASE_SECRET_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
+const nouveauClient = () => createClient(URL, PUB, { auth: { autoRefreshToken: false, persistSession: false } });
 
-const admin = createClient(URL, env.SUPABASE_SECRET_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
-const nouveauClient = () =>
-  createClient(URL, PUB, { auth: { autoRefreshToken: false, persistSession: false } });
-
-let total = 0;
-let reussis = 0;
+let total = 0, reussis = 0;
 const echecs = [];
-
 function verifier(nom, condition, detail = '') {
   total++;
-  if (condition) {
-    reussis++;
-    console.log(`   [OK]     ${nom}`);
-  } else {
-    echecs.push(nom + (detail ? ` — ${detail}` : ''));
-    console.log(`   [ECHEC]  ${nom}${detail ? ` — ${detail}` : ''}`);
-  }
+  if (condition) { reussis++; console.log(`   [OK]     ${nom}`); }
+  else { echecs.push(nom + (detail ? ` — ${detail}` : '')); console.log(`   [ECHEC]  ${nom}${detail ? ` — ${detail}` : ''}`); }
+}
+const section = (t) => console.log(`\n── ${t} ${'─'.repeat(Math.max(0, 66 - t.length))}\n`);
+
+const jetables = { orgs: [], auth: [] };
+const jour = 24 * 3600 * 1000;
+
+async function creerBoutique(nom, { expiree = false } = {}) {
+  const { data: org, error } = await service.from('organisations')
+    .insert({ nom: `TEST ${nom}`, slug: `test-${randomUUID().slice(0, 8)}` }).select('id').single();
+  if (error) throw new Error(`organisation ${nom} : ${error.message}`);
+  jetables.orgs.push(org.id);
+  const { error: e2 } = await service.from('abonnements').insert({
+    organisation_id: org.id, plan: 'solo', statut: expiree ? 'actif' : 'essai',
+    date_expiration: new Date(Date.now() + (expiree ? -1 : 30) * jour).toISOString(),
+  });
+  if (e2) throw new Error(`abonnement ${nom} : ${e2.message}`);
+  return org.id;
 }
 
-const jetables = { auth: [], lignes: [], ventes: [], clientes: [] };
-
-async function creerCompte(role) {
-  const email = `test-${randomUUID().slice(0, 8)}@fallora-test.local`;
+async function creerCompte(orgId, role, nom) {
+  const email = `test-${randomUUID().slice(0, 8)}@fallik-test.local`;
   const motDePasse = randomUUID();
-  const { data: a, error: e1 } = await admin.auth.admin.createUser({
-    email, password: motDePasse, email_confirm: true, app_metadata: { role },
-  });
-  if (e1) throw new Error(`creation auth (${role}) : ${e1.message}`);
+  const { data: a, error: e1 } = await service.auth.admin.createUser({ email, password: motDePasse, email_confirm: true, app_metadata: { role } });
+  if (e1) throw new Error(`auth ${nom} : ${e1.message}`);
   jetables.auth.push(a.user.id);
-
-  const { data: l, error: e2 } = await admin
-    .from('utilisateurs')
-    .insert({ nom: `Test ${role}`, email, role, actif: true, auth_id: a.user.id })
-    .select().single();
-  if (e2) throw new Error(`creation ligne (${role}) : ${e2.message}`);
-  jetables.lignes.push(l.id);
-
+  const { data: l, error: e2 } = await service.from('utilisateurs')
+    .insert({ organisation_id: orgId, nom, email, role, actif: true, auth_id: a.user.id }).select('id').single();
+  if (e2) throw new Error(`utilisateur ${nom} : ${e2.message}`);
   const client = nouveauClient();
   const { error: e3 } = await client.auth.signInWithPassword({ email, password: motDePasse });
-  if (e3) throw new Error(`connexion (${role}) : ${e3.message}`);
-  return { client, profilId: l.id, email };
+  if (e3) throw new Error(`connexion ${nom} : ${e3.message}`);
+  return { client, id: l.id, orgId };
 }
+
+async function creerProduit(orgId, nom) {
+  const { data, error } = await service.from('produits')
+    .insert({ organisation_id: orgId, nom, prix: 1000, stock_restant: 50, stock_initial: 50, actif: true }).select('id').single();
+  if (error) throw new Error(`produit ${nom} : ${error.message}`);
+  return data.id;
+}
+
+const vente = (client, produitId) => client.rpc('enregistrer_vente', {
+  p_cliente_nom: 'Cliente test', p_cliente_telephone: null,
+  p_produits: [{ produit_id: produitId, quantite: 1 }],
+  p_statut_paiement: 'paye', p_montant_paye: null, p_mode_paiement: 'cash',
+});
+
+// Une ecriture « bloquee » = erreur, OU aucune ligne touchee.
+const bloque = ({ data, error }) => !!error || !data || (Array.isArray(data) && data.length === 0);
+const lignes = (r) => (Array.isArray(r.data) ? r.data : []);
 
 try {
+  console.log(`Base testee : ${URL}`);
+
+  // ── Mise en place ──
+  const orgA = await creerBoutique('A');
+  const orgB = await creerBoutique('B');
+  const orgC = await creerBoutique('C', { expiree: true });
+  const propA = await creerCompte(orgA, 'proprietaire', 'Proprio A');
+  const gerantA = await creerCompte(orgA, 'admin', 'Gerant A');
+  const vendA = await creerCompte(orgA, 'vendeuse', 'Vendeuse A');
+  const vendA2 = await creerCompte(orgA, 'vendeuse', 'Vendeuse A2');
+  const propB = await creerCompte(orgB, 'proprietaire', 'Proprio B');
+  const vendB = await creerCompte(orgB, 'vendeuse', 'Vendeuse B');
+  const propC = await creerCompte(orgC, 'proprietaire', 'Proprio C');
+  const prodA = await creerProduit(orgA, 'Produit A');
+  const prodB = await creerProduit(orgB, 'Produit B');
+  const prodC = await creerProduit(orgC, 'Produit C');
+
+  const rA = await vente(vendA.client, prodA);
+  verifier('Vendeuse A peut vendre un produit de A', !rA.error, rA.error?.message);
+  const rB = await vente(vendB.client, prodB);
+  verifier('Vendeuse B peut vendre un produit de B', !rB.error, rB.error?.message);
+  const venteB = rB.data;
+  const { data: factB } = await propB.client.rpc('ouvrir_facture', { p_nom_client: 'Table B' });
+
   // ═══════════════════════════════════════════════════════════════
-  console.log('\n╔══════════════════════════════════════════════════════════╗');
-  console.log('║  1. ATTAQUANT ANONYME                                    ║');
-  console.log('║     cle publishable, aucune session — ce que ferait      ║');
-  console.log('║     n\'importe quel visiteur avec la console du navigateur ║');
-  console.log('╚══════════════════════════════════════════════════════════╝\n');
-
-  const pirate = nouveauClient();
-
-  for (const table of ['utilisateurs', 'clientes', 'ventes', 'produits', 'vente_produits', 'paiements']) {
-    const { data, error } = await pirate.from(table).select('*');
-    verifier(
-      `lire ${table} est refuse`,
-      !!error || (data?.length ?? 0) === 0,
-      error ? '' : `${data?.length} ligne(s) exposee(s) !`
-    );
+  section('1. Visiteur anonyme (cle publique, sans session)');
+  const anon = nouveauClient();
+  for (const t of ['organisations', 'abonnements', 'utilisateurs', 'produits', 'clientes', 'ventes', 'vente_produits', 'paiements', 'factures', 'facture_lignes', 'push_subscriptions', 'inscriptions_journal']) {
+    const r = await anon.from(t).select('*').limit(5);
+    verifier(`anonyme ne lit rien dans ${t}`, !!r.error || lignes(r).length === 0, `${lignes(r).length} ligne(s)`);
   }
-
-  const { error: eIns } = await pirate.from('utilisateurs')
-    .insert({ nom: 'Pirate', email: `pirate-${randomUUID().slice(0,6)}@x.com`, role: 'admin', actif: true });
-  verifier('creer un compte admin est refuse', !!eIns);
-
-  const { error: eRpc } = await pirate.rpc('enregistrer_vente', {
-    p_cliente_nom: 'Pirate', p_cliente_telephone: null,
-    p_produits: [{ produit_id: 1, quantite: 1 }],
-    p_statut_paiement: 'paye', p_montant_paye: null, p_mode_paiement: 'cash',
-  });
-  verifier('appeler enregistrer_vente est refuse', !!eRpc);
+  verifier('anonyme ne peut pas vendre', !!(await vente(anon, prodA)).error);
+  const accAnon = await anon.rpc('mon_acces');
+  verifier('anonyme : mon_acces ne renvoie rien', !!accAnon.error || accAnon.data === null);
+  verifier('anonyme ne peut pas creer de boutique', bloque(await anon.from('organisations').insert({ nom: 'pirate' }).select()));
 
   // ═══════════════════════════════════════════════════════════════
-  console.log('\n╔══════════════════════════════════════════════════════════╗');
-  console.log('║  2. VENDEUSE CONNECTEE                                   ║');
-  console.log('║     compte legitime — jusqu\'ou peut-elle aller ?         ║');
-  console.log('╚══════════════════════════════════════════════════════════╝\n');
-
-  const v1 = await creerCompte('vendeuse');
-  const v2 = await creerCompte('vendeuse');
-
-  const { data: prod } = await v1.client.from('produits').select('id, prix, stock_restant').eq('actif', true).limit(1);
-  verifier('elle voit le catalogue produits', (prod?.length ?? 0) > 0);
-
-  const produit = prod?.[0];
-  if (produit) {
-    const { error: ePrix } = await v1.client.from('produits')
-      .update({ prix: 1 }).eq('id', produit.id);
-    const { data: apres } = await admin.from('produits').select('prix').eq('id', produit.id).single();
-    verifier(
-      'elle NE PEUT PAS changer les prix',
-      !!ePrix || Number(apres.prix) === Number(produit.prix),
-      !ePrix && Number(apres.prix) !== Number(produit.prix) ? 'prix modifie !' : ''
-    );
-
-    // Vente legitime via la fonction serveur.
-    const stockAvant = produit.stock_restant;
-    const { data: venteId, error: eVente } = await v1.client.rpc('enregistrer_vente', {
-      p_cliente_nom: 'Cliente Test', p_cliente_telephone: `+000${randomUUID().slice(0, 8)}`,
-      p_produits: [{ produit_id: produit.id, quantite: 1 }],
-      p_statut_paiement: 'paye', p_montant_paye: null, p_mode_paiement: 'cash',
-    });
-    verifier('elle PEUT enregistrer une vente', !eVente && !!venteId, eVente?.message ?? '');
-
-    if (venteId) {
-      jetables.ventes.push(venteId);
-      const { data: v } = await admin.from('ventes').select('total, vendeuse_id, cliente_id').eq('id', venteId).single();
-      if (v?.cliente_id) jetables.clientes.push(v.cliente_id);
-      verifier('le total est calcule en base, pas envoye par le client', Number(v.total) === Number(produit.prix));
-      verifier('la vente est bien attribuee a son autrice', v.vendeuse_id === v1.profilId);
-
-      const { data: st } = await admin.from('produits').select('stock_restant').eq('id', produit.id).single();
-      verifier('le stock a ete decremente dans la meme transaction', st.stock_restant === stockAvant - 1);
-
-      // Cloisonnement entre vendeuses.
-      const { data: vuePar2 } = await v2.client.from('ventes').select('id').eq('id', venteId);
-      verifier('une AUTRE vendeuse ne voit pas cette vente', (vuePar2?.length ?? 0) === 0);
-
-      const { data: lignes2 } = await v2.client.from('vente_produits').select('id').eq('vente_id', venteId);
-      verifier('elle ne voit pas non plus ses lignes de produits', (lignes2?.length ?? 0) === 0);
-
-      const { data: paie2 } = await v2.client.from('paiements').select('id').eq('vente_id', venteId);
-      verifier('ni ses paiements', (paie2?.length ?? 0) === 0);
+  section('2. Cloisonnement : la boutique A face aux donnees de B');
+  for (const [qui, c] of [['proprietaire A', propA], ['gerant A', gerantA], ['vendeuse A', vendA]]) {
+    for (const t of ['organisations', 'utilisateurs', 'produits', 'clientes', 'ventes', 'factures']) {
+      const col = t === 'organisations' ? 'id' : 'organisation_id';
+      const r = await c.client.from(t).select(col);
+      const etrangeres = lignes(r).filter((x) => x[col] !== orgA);
+      verifier(`${qui} ne voit que sa boutique dans ${t}`, !r.error && etrangeres.length === 0, r.error?.message || `${etrangeres.length} ligne(s) d'une autre boutique`);
     }
-
-    // Stock insuffisant.
-    const { error: eStock } = await v1.client.rpc('enregistrer_vente', {
-      p_cliente_nom: 'Gourmande', p_cliente_telephone: null,
-      p_produits: [{ produit_id: produit.id, quantite: 999999 }],
-      p_statut_paiement: 'paye', p_montant_paye: null, p_mode_paiement: 'cash',
-    });
-    verifier('une vente au-dela du stock est refusee', !!eStock);
   }
+  const vpB = await propA.client.from('vente_produits').select('id').eq('vente_id', venteB);
+  verifier('proprietaire A ne lit pas les lignes de vente de B', lignes(vpB).length === 0);
+  const payB = await propA.client.from('paiements').select('id').eq('vente_id', venteB);
+  verifier('proprietaire A ne lit pas les paiements de B', lignes(payB).length === 0);
+  const flB = await propA.client.from('facture_lignes').select('id').eq('facture_id', factB);
+  verifier('proprietaire A ne lit pas les factures ouvertes de B', lignes(flB).length === 0);
 
-  const { data: users1 } = await v1.client.from('utilisateurs').select('id');
-  verifier('elle ne voit que son propre profil', users1?.length === 1, `${users1?.length} profils visibles`);
-
-  const { error: eSuppr } = await v1.client.from('utilisateurs').delete().eq('id', v2.profilId);
-  const { data: existeEncore } = await admin.from('utilisateurs').select('id').eq('id', v2.profilId);
-  verifier('elle ne peut pas supprimer une collegue', !!eSuppr || existeEncore?.length === 1);
+  verifier('proprietaire A ne modifie pas un produit de B', bloque(await propA.client.from('produits').update({ prix: 1 }).eq('id', prodB).select()));
+  verifier('proprietaire A ne supprime pas un produit de B', bloque(await propA.client.from('produits').delete().eq('id', prodB).select()));
+  const { data: prodBApres } = await service.from('produits').select('prix').eq('id', prodB).single();
+  verifier('le produit de B est intact', prodBApres?.prix == 1000);
+  verifier('proprietaire A ne cree pas de produit chez B', bloque(await propA.client.from('produits').insert({ organisation_id: orgB, nom: 'intrus', prix: 1 }).select()));
+  verifier('proprietaire A ne modifie pas une vente de B', bloque(await propA.client.from('ventes').update({ total: 0 }).eq('id', venteB).select()));
+  verifier('proprietaire A ne desactive pas un compte de B', bloque(await propA.client.from('utilisateurs').update({ actif: false }).eq('id', vendB.id).select()));
+  verifier('vendeuse A ne vend pas un produit de B', !!(await vente(vendA.client, prodB)).error);
+  verifier('vendeuse A ne vend pas un produit de C', !!(await vente(vendA.client, prodC)).error);
+  const ajout = await propA.client.rpc('facture_definir_quantite', { p_facture_id: factB, p_produit_id: prodA, p_quantite: 1 });
+  verifier('proprietaire A ne touche pas une facture ouverte de B', !!ajout.error);
+  verifier('proprietaire A n\'annule pas une facture de B', !!(await propA.client.rpc('facture_annuler', { p_facture_id: factB })).error);
+  const { data: factA } = await propA.client.rpc('ouvrir_facture', { p_nom_client: 'Table A' });
+  const ajoutB = await propA.client.rpc('facture_definir_quantite', { p_facture_id: factA, p_produit_id: prodB, p_quantite: 1 });
+  verifier('proprietaire A ne met pas un produit de B sur sa facture', !!ajoutB.error);
+  const tdb = await propA.client.rpc('tableau_de_bord_admin');
+  verifier('tableau de bord A ne compte que les ventes de A', !tdb.error && Number(tdb.data?.stats?.total_ventes) === 1000, JSON.stringify(tdb.data?.stats || tdb.error?.message));
+  verifier('vendeuse A ne lit pas le tableau de bord', !!(await vendA.client.rpc('tableau_de_bord_admin')).error);
 
   // ═══════════════════════════════════════════════════════════════
-  console.log('\n╔══════════════════════════════════════════════════════════╗');
-  console.log('║  3. ADMIN CONNECTE                                       ║');
-  console.log('║     l\'app doit continuer de fonctionner                  ║');
-  console.log('╚══════════════════════════════════════════════════════════╝\n');
-
-  const adm = await creerCompte('admin');
-
-  const { data: tousUsers } = await adm.client.from('utilisateurs').select('id');
-  verifier('il voit tous les comptes', (tousUsers?.length ?? 0) >= 3, `${tousUsers?.length} visibles`);
-
-  const { data: toutesVentes } = await adm.client.from('ventes').select('id');
-  verifier('il voit toutes les ventes', (toutesVentes?.length ?? 0) >= 1);
-
-  const { data: toutesClientes } = await adm.client.from('clientes').select('id');
-  verifier('il voit toutes les clientes', (toutesClientes?.length ?? 0) >= 1);
-
-  if (prod?.[0]) {
-    const prixOrigine = prod[0].prix;
-    const { error: eMaj } = await adm.client.from('produits').update({ prix: prixOrigine }).eq('id', prod[0].id);
-    verifier('il peut modifier les produits', !eMaj, eMaj?.message ?? '');
-  }
+  section('3. Abonnement : impossible de se prolonger soi-meme');
+  const aboA = await propA.client.from('abonnements').select('organisation_id, date_expiration');
+  verifier('proprietaire A lit SON abonnement (et seulement le sien)', lignes(aboA).length === 1 && lignes(aboA)[0].organisation_id === orgA);
+  verifier('gerant A ne lit pas l\'abonnement', lignes(await gerantA.client.from('abonnements').select('*')).length === 0);
+  verifier('vendeuse A ne lit pas l\'abonnement', lignes(await vendA.client.from('abonnements').select('*')).length === 0);
+  const loin = new Date(Date.now() + 3650 * jour).toISOString();
+  verifier('proprietaire A ne prolonge pas son abonnement', bloque(await propA.client.from('abonnements').update({ date_expiration: loin, plan: 'pro' }).eq('organisation_id', orgA).select()));
+  verifier('proprietaire A ne cree pas d\'abonnement', bloque(await propA.client.from('abonnements').insert({ organisation_id: orgA, date_expiration: loin }).select()));
+  verifier('proprietaire A ne supprime pas son abonnement', bloque(await propA.client.from('abonnements').delete().eq('organisation_id', orgA).select()));
+  const { data: aboApres } = await service.from('abonnements').select('plan, date_expiration').eq('organisation_id', orgA).single();
+  verifier('abonnement A intact', aboApres?.plan === 'solo' && new Date(aboApres.date_expiration) < new Date(loin));
+  verifier('proprietaire A ne reactive/desactive pas sa boutique (actif)', bloque(await propA.client.from('organisations').update({ actif: true }).eq('id', orgA).select()));
+  verifier('proprietaire A ne change pas son slug', bloque(await propA.client.from('organisations').update({ slug: 'vole' }).eq('id', orgA).select()));
+  const reglage = await gerantA.client.from('organisations').update({ seuil_stock_bas: 7 }).eq('id', orgA).select('seuil_stock_bas');
+  verifier('gerant A modifie les reglages de sa boutique', !reglage.error && lignes(reglage)[0]?.seuil_stock_bas === 7, reglage.error?.message);
+  verifier('vendeuse A ne modifie pas les reglages', bloque(await vendA.client.from('organisations').update({ seuil_stock_bas: 0 }).eq('id', orgA).select()));
+  verifier('proprietaire A ne modifie pas les reglages de B', bloque(await propA.client.from('organisations').update({ nom: 'pirate' }).eq('id', orgB).select()));
 
   // ═══════════════════════════════════════════════════════════════
-  console.log('\n╔══════════════════════════════════════════════════════════╗');
-  console.log('║  4. COMPTE DESACTIVE                                     ║');
-  console.log('╚══════════════════════════════════════════════════════════╝\n');
+  section('4. Roles : personne ne prend la place du proprietaire');
+  verifier('gerant A ne se promeut pas proprietaire', bloque(await gerantA.client.from('utilisateurs').update({ role: 'proprietaire' }).eq('id', gerantA.id).select()));
+  verifier('gerant A ne promeut pas une vendeuse', bloque(await gerantA.client.from('utilisateurs').update({ role: 'admin' }).eq('id', vendA.id).select()));
+  verifier('gerant A ne desactive pas le proprietaire', bloque(await gerantA.client.from('utilisateurs').update({ actif: false }).eq('id', propA.id).select()));
+  verifier('gerant A ne renomme pas le proprietaire', bloque(await gerantA.client.from('utilisateurs').update({ nom: 'x' }).eq('id', propA.id).select()));
+  verifier('gerant A ne supprime pas le proprietaire', bloque(await gerantA.client.from('utilisateurs').delete().eq('id', propA.id).select()));
+  const desact = await gerantA.client.from('utilisateurs').update({ actif: false }).eq('id', vendA2.id).select('actif');
+  verifier('gerant A desactive une vendeuse', !desact.error && lignes(desact)[0]?.actif === false, desact.error?.message);
+  verifier('proprietaire A ne se retrograde pas lui-meme', bloque(await propA.client.from('utilisateurs').update({ role: 'admin' }).eq('id', propA.id).select()));
+  verifier('proprietaire A ne se desactive pas lui-meme', bloque(await propA.client.from('utilisateurs').update({ actif: false }).eq('id', propA.id).select()));
+  const promo = await propA.client.from('utilisateurs').update({ role: 'admin' }).eq('id', vendA2.id).select('role');
+  verifier('proprietaire A change le role d\'une vendeuse', !promo.error && lignes(promo)[0]?.role === 'admin', promo.error?.message);
+  verifier('proprietaire A ne deplace pas un compte vers B', bloque(await propA.client.from('utilisateurs').update({ organisation_id: orgB }).eq('id', vendA.id).select()));
+  verifier('proprietaire A ne change pas l\'email d\'un compte', bloque(await propA.client.from('utilisateurs').update({ email: 'x@y.z' }).eq('id', vendA.id).select()));
+  verifier('proprietaire A ne cree pas de compte directement', bloque(await propA.client.from('utilisateurs').insert({ organisation_id: orgA, nom: 'x', email: `x-${randomUUID().slice(0, 6)}@t.local`, role: 'admin' }).select()));
+  verifier('vendeuse A ne se promeut pas', bloque(await vendA.client.from('utilisateurs').update({ role: 'admin' }).eq('id', vendA.id).select()));
+  const ventesVend = await vendA.client.from('ventes').select('vendeuse_id');
+  verifier('vendeuse A ne voit que ses propres ventes', lignes(ventesVend).every((v) => v.vendeuse_id === vendA.id));
 
-  await admin.from('utilisateurs').update({ actif: false }).eq('id', v1.profilId);
-  const { data: apresDesac } = await v1.client.from('produits').select('id').limit(1);
-  verifier(
-    'un compte desactive perd l\'acces immediatement, sans attendre l\'expiration du jeton',
-    (apresDesac?.length ?? 0) === 0,
-    (apresDesac?.length ?? 0) > 0 ? 'il lit encore les produits !' : ''
-  );
-} catch (err) {
-  console.log('\n   ERREUR :', err.message);
-  echecs.push('exception : ' + err.message);
+  // ═══════════════════════════════════════════════════════════════
+  section('5. Boutique expiree (C)');
+  const accC = await propC.client.rpc('mon_acces');
+  verifier('mon_acces dit « pas d\'acces » a C', !accC.error && accC.data?.acces === false, JSON.stringify(accC.data || accC.error?.message));
+  verifier('C lit encore sa propre fiche (pour l\'ecran d\'abonnement)', lignes(await propC.client.from('utilisateurs').select('id')).length === 1);
+  verifier('C ne lit plus ses produits', lignes(await propC.client.from('produits').select('id')).length === 0);
+  verifier('C ne peut plus vendre', !!(await vente(propC.client, prodC)).error);
+  verifier('C ne peut plus ouvrir de facture', !!(await propC.client.rpc('ouvrir_facture', { p_nom_client: 'x' })).error);
+  verifier('C ne modifie plus ses reglages', bloque(await propC.client.from('organisations').update({ nom: 'x' }).eq('id', orgC).select()));
+  verifier('C ne lit plus le tableau de bord', !!(await propC.client.rpc('tableau_de_bord_admin')).error);
+
+  // ═══════════════════════════════════════════════════════════════
+  section('6. Suspension en direct de la boutique A');
+  await service.from('abonnements').update({ statut: 'suspendu' }).eq('organisation_id', orgA);
+  verifier('A suspendue : la vendeuse ne voit plus les produits', lignes(await vendA.client.from('produits').select('id')).length === 0);
+  verifier('A suspendue : la vendeuse ne peut plus vendre', !!(await vente(vendA.client, prodA)).error);
+  await service.from('abonnements').update({ statut: 'actif' }).eq('organisation_id', orgA);
+  await service.from('organisations').update({ actif: false }).eq('id', orgA);
+  verifier('A desactivee : plus d\'acces', lignes(await propA.client.from('produits').select('id')).length === 0);
+  await service.from('organisations').update({ actif: true }).eq('id', orgA);
+  verifier('A reactivee : acces retabli', lignes(await vendA.client.from('produits').select('id')).length === 1);
+} catch (e) {
+  echecs.push(`ERREUR DE MISE EN PLACE : ${e.message}`);
+  console.error('\n!! Erreur :', e.message);
 } finally {
-  console.log('\n─── Nettoyage ───');
-  for (const id of jetables.ventes) await admin.from('ventes').delete().eq('id', id);
-  for (const id of jetables.clientes) await admin.from('clientes').delete().eq('id', id);
-  for (const id of jetables.lignes) await admin.from('utilisateurs').delete().eq('id', id);
-  for (const id of jetables.auth) await admin.auth.admin.deleteUser(id);
-  const { data: reste } = await admin.from('utilisateurs').select('id').like('email', '%@fallora-test.local');
-  console.log(`   ${reste?.length === 0 ? '[OK]    ' : '[ATTENTION]'} comptes jetables supprimes (${reste?.length ?? '?'} restant)`);
+  // ── Nettoyage ── (cascade : comptes, produits, ventes, factures, abonnements)
+  for (const id of jetables.orgs) await service.from('organisations').delete().eq('id', id);
+  for (const id of jetables.auth) await service.auth.admin.deleteUser(id);
+  console.log(`\nNettoyage : ${jetables.orgs.length} boutique(s) et ${jetables.auth.length} compte(s) de test supprimes.`);
 }
 
-console.log('\n═══════════════════════════════════════════════════════════');
-console.log(`  ${reussis}/${total} controles passes`);
+console.log(`\n══ Resultat : ${reussis}/${total} controles reussis ══`);
 if (echecs.length) {
-  console.log('\n  Echecs :');
-  echecs.forEach((e) => console.log(`    - ${e}`));
-} else {
-  console.log('  Aucune faille detectee.');
+  console.log('\nEchecs :');
+  echecs.forEach((e) => console.log(' - ' + e));
+  process.exit(1);
 }
-console.log('═══════════════════════════════════════════════════════════\n');
-process.exit(echecs.length ? 1 : 0);

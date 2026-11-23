@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useUtilisateur } from '@/lib/utilisateur';
+import MaBoutique from './MaBoutique';
 
 // Plus de mot_de_passe : les mots de passe vivent dans auth.users, haches
 // par Supabase. L'app ne peut plus les lire, et c'est le but.
@@ -13,6 +15,7 @@ const inputStyle: React.CSSProperties = { height: '44px', padding: '0 14px', bor
 const labelStyle: React.CSSProperties = { fontSize: '11px', fontWeight: 600, color: SOFT, letterSpacing: '.5px', marginBottom: '6px', textTransform: 'uppercase' };
 
 export default function AdminParametres() {
+  const { acces } = useUtilisateur('admin');
   const [vendeuses, setVendeuses] = useState<Vendeuse[]>([]);
   const [chargement, setChargement] = useState(true);
   const [formOuvert, setFormOuvert] = useState(false);
@@ -101,6 +104,9 @@ export default function AdminParametres() {
 
   return (
     <div className="fade-up">
+      <MaBoutique estProprietaire={acces?.role === 'proprietaire'} />
+
+      <div style={{ fontSize: '16px', fontWeight: 800, color: INK, margin: '6px 0 14px' }}>Comptes vendeuses</div>
       {/* Résumé */}
       <div style={{ ...carte, display: 'flex', flexWrap: 'wrap', marginBottom: '18px' }}>
         {miniStats.map((m, i) => (

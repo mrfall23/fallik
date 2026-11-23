@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from './supabase';
+import { estGestion, accueilPourRole, type Acces } from './roles';
 
 export type Utilisateur = {
   id: number;
@@ -25,6 +26,7 @@ export type Utilisateur = {
  */
 export function useUtilisateur(roleRequis?: 'admin' | 'vendeuse') {
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
+  const [acces, setAcces] = useState<Acces | null>(null);
   const [chargement, setChargement] = useState(true);
   const router = useRouter();
 
@@ -43,11 +45,10 @@ export function useUtilisateur(roleRequis?: 'admin' | 'vendeuse') {
         return;
       }
 
-      const { data: profil } = await supabase
-        .from('utilisateurs')
-        .select('id, nom, email, role, actif')
-        .eq('auth_id', authUser.id)
-        .single();
+      const [{ data: profil }, { data: etat }] = await Promise.all([
+        supabase.from('utilisateurs').select('id, nom, email, role, actif').eq('auth_id', authUser.id).single(),
+        supabase.rpc('mon_acces'),
+      ]);
 
       if (annule) return;
 
@@ -58,12 +59,22 @@ export function useUtilisateur(roleRequis?: 'admin' | 'vendeuse') {
         return;
       }
 
-      if (roleRequis && profil.role !== roleRequis) {
-        router.replace(profil.role === 'admin' ? '/admin' : '/vendeuse');
+      // Boutique desactivee, abonnement suspendu / resilie / expire.
+      const a = etat as Acces | null;
+      if (!a || !a.acces) {
+        router.replace('/abonnement');
+        return;
+      }
+
+      // 'admin' = espace de gestion : proprietaire et gerant(e) y ont droit.
+      // L'espace vendeuse est ouvert a tous les roles (le proprietaire vend aussi).
+      if (roleRequis === 'admin' && !estGestion(profil.role)) {
+        router.replace(accueilPourRole(profil.role));
         return;
       }
 
       setUtilisateur(profil);
+      setAcces(a);
       setChargement(false);
     })();
 
@@ -72,7 +83,7 @@ export function useUtilisateur(roleRequis?: 'admin' | 'vendeuse') {
     };
   }, [roleRequis, router]);
 
-  return { utilisateur, chargement };
+  return { utilisateur, acces, chargement };
 }
 
 /** Termine la session Supabase et renvoie au login. */
