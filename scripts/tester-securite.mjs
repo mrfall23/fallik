@@ -239,6 +239,19 @@ try {
   const annV = await gerantA.client.rpc('annuler_vente', { p_vente_id: rA.data, p_motif: 'Test intrusion' });
   verifier('gerant A annule une vente avec motif', !annV.error && annV.data?.articles_remis === 1, annV.error?.message);
 
+  // Phase 2 : stock trace, prix d'achat confidentiel.
+  verifier('gerant A ne change pas le stock directement', bloque(await gerantA.client.from('produits').update({ stock_restant: 999 }).eq('id', prodA).select()));
+  verifier('vendeuse A ne reapprovisionne pas', !!(await vendA.client.rpc('reapprovisionner', { p_produit_id: prodA, p_quantite: 5, p_note: null })).error);
+  verifier('proprietaire B ne reapprovisionne pas un produit de A', !!(await propB.client.rpc('reapprovisionner', { p_produit_id: prodA, p_quantite: 5, p_note: null })).error);
+  const reap = await gerantA.client.rpc('reapprovisionner', { p_produit_id: prodA, p_quantite: 5, p_note: 'Test' });
+  verifier('gerant A reapprovisionne', !reap.error, reap.error?.message);
+  verifier('mouvements de stock : gerant A lit l\'historique', lignes(await gerantA.client.from('mouvements_stock').select('type').eq('produit_id', prodA)).some((m) => m.type === 'reappro'));
+  verifier('mouvements de stock : vendeuse A ne lit rien', lignes(await vendA.client.from('mouvements_stock').select('id')).length === 0);
+  verifier('gerant A fixe un prix d\'achat', !(await gerantA.client.from('produits_couts').upsert({ produit_id: prodA, prix_achat: 600 })).error);
+  verifier('vendeuse A ne lit pas les prix d\'achat', lignes(await vendA.client.from('produits_couts').select('*')).length === 0);
+  verifier('proprietaire B ne lit pas les prix d\'achat de A', lignes(await propB.client.from('produits_couts').select('*')).length === 0);
+  verifier('proprietaire B n\'ecrit pas un prix d\'achat chez A', bloque(await propB.client.from('produits_couts').upsert({ produit_id: prodA, prix_achat: 1 }).select()));
+
   // Telephone caisse : connexion par code, sans mot de passe.
   const jeton = 'c'.repeat(64);
   verifier('gerant A active un poste caisse', !(await gerantA.client.rpc('creer_poste_caisse', { p_nom: 'Test', p_jeton_hash: jeton })).error);

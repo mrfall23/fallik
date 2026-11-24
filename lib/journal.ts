@@ -16,7 +16,7 @@ const f = (n: unknown) => Math.round(Number(n) || 0).toLocaleString('fr-FR');
 
 export const ICONES_JOURNAL: Record<string, string> = {
   facture_annulee: 'delete_forever', article_retire: 'remove_shopping_cart', correction_article: 'edit_note',
-  credit_accorde: 'credit_card_clock', vente_annulee: 'block', creance_encaissee: 'payments', code_gerant_faux: 'gpp_maybe', stock_modifie: 'inventory',
+  credit_accorde: 'credit_card_clock', vente_annulee: 'block', reappro: 'local_shipping', stock_corrige: 'tune', creance_encaissee: 'payments', code_gerant_faux: 'gpp_maybe', stock_modifie: 'inventory',
   prix_modifie: 'sell', produit_cree: 'add_box', produit_supprime: 'delete', cloture_caisse: 'point_of_sale',
   inventaire: 'fact_check', connexion_caisse: 'login', caisse_compte_bloque: 'lock',
   poste_caisse_active: 'smartphone', poste_caisse_retire: 'mobile_off', pin_modifie: 'pin', pin_vendeuse_modifie: 'pin',
@@ -30,6 +30,8 @@ export function decrireEvenement(j: LigneJournal): string {
     case 'facture_annulee': return `${qui} a annulé la facture « ${d.client} » : ${f(j.montant)} FCFA${valide}`;
     case 'article_retire': return `${qui} a retiré ${d.avant - d.apres} × ${d.produit} de « ${d.client} » (${f(j.montant)} FCFA)${valide}`;
     case 'correction_article': return `${qui} a corrigé ${d.produit} sur « ${d.client} » (${d.avant} → ${d.apres}) juste après l'ajout`;
+    case 'reappro': return `${qui} a reçu ${d.quantite} × ${d.produit} (stock ${d.apres})${d.note ? ` — ${d.note}` : ''}`;
+    case 'stock_corrige': return `${qui} a corrigé le stock de ${d.produit} : ${d.avant} → ${d.apres} (${f(j.montant)} FCFA) — ${d.motif}`;
     case 'vente_annulee': return `${qui} a annulé la vente n° ${d.vente} (« ${d.client} », vendue par ${d.vendeuse || '?'}) : ${f(j.montant)} FCFA — motif : ${d.motif}`;
     case 'creance_encaissee': return `${qui} a encaissé ${f(j.montant)} FCFA de « ${d.client} » sur une dette (reste ${f(d.reste)} FCFA)`;
     case 'credit_accorde': return `${qui} a fait crédit à « ${d.client} » : reste ${f(j.montant)} FCFA sur ${f(d.total)}${valide}`;
