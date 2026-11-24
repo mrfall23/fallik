@@ -1,17 +1,20 @@
 'use client';
-import { useRef, useState } from 'react';
-import Recu, { type RecuData } from '../components/Recu';
-import { partagerImageRecu, whatsappTexte } from '../components/recuPartage';
+import { useState } from 'react';
+import { type RecuData } from '../components/Recu';
+import RecuModal, { dateRecu, numeroRecu, type EnteteRecu } from '../components/RecuModal';
+import { ajouterAFile, nouvelId, type PayloadVente } from '@/lib/fileHorsLigne';
 import { useValidationGerant, validationRequise, signalerAuPatron } from '../components/ValidationGerant';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const INK = '#1A2438', BLUE = '#2563EB', GRAD = 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
 const inputStyle: React.CSSProperties = { height: '44px', padding: '0 14px', borderRadius: '12px', background: '#F6F8FC', border: '1px solid #E4E9F2', outline: 'none', color: INK, fontSize: '14px', width: '100%' };
 
-// Vente rapide (achat au comptoir en un coup). Extrait de l'ancienne page
-// vendeuse, inchangé dans son fonctionnement — passe par /api/ventes.
-export default function VenteRapide({ produits, rechargerProduits, user, isMobile, boutiqueNom }: {
-  produits: any[]; rechargerProduits: () => Promise<void>; user: any; isMobile: boolean; boutiqueNom: string;
+// Vente rapide (achat au comptoir en un coup) — passe par /api/ventes.
+// Sans reseau, une vente PAYEE est gardee sur le telephone et envoyee au
+// retour de la connexion (la page vendeuse s'en charge).
+export default function VenteRapide({ produits, rechargerProduits, user, isMobile, entete, onVente }: {
+  produits: any[]; rechargerProduits: () => Promise<void>; user: any; isMobile: boolean; entete: EnteteRecu;
+  onVente: () => void; // apres une vente (envoyee ou mise en attente)
 }) {
   const [panier, setPanier] = useState<any[]>([]);
   const [cliente, setCliente] = useState({ nom: '', telephone: '' });
@@ -22,7 +25,6 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
   const [succes, setSucces] = useState('');
   const [erreur, setErreur] = useState('');
   const [recu, setRecu] = useState<RecuData | null>(null);
-  const recuRef = useRef<HTMLDivElement>(null);
   const { demander, element: fenetreGerant } = useValidationGerant();
 
   const ajouterAuPanier = (produit: any) => {
@@ -52,6 +54,21 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
     if (!cliente.nom.trim()) { setErreur('Entrez le nom de la cliente.'); return; }
     if (statutPaiement === 'partiel' && (!montantPaye || montantPayeNum <= 0)) { setErreur('Entrez le montant payé.'); return; }
     setErreur(''); setEnregistrement(true);
+    // Hors ligne : seule une vente payee peut attendre le reseau.
+    const mettreEnAttente = () => {
+      if (statutPaiement !== 'paye') { setErreur('Pas de connexion : un crédit ne peut pas attendre (le code du gérant doit être vérifié). Encaissez en entier ou réessayez.'); return; }
+      const payload: PayloadVente = {
+        cliente_nom: cliente.nom, cliente_telephone: cliente.telephone || null,
+        produits: panier.map(p => ({ produit_id: p.id, quantite: p.quantite })),
+        statut_paiement: 'paye', montant_paye: null, mode_paiement: modePaiement,
+      };
+      ajouterAFile({ id: nouvelId(), utilisateur_id: user?.id, payload, apercu: { cliente: cliente.nom.trim(), total, date: new Date().toISOString() } });
+      setSucces('Pas de connexion : vente gardée sur ce téléphone, elle sera envoyée dès le retour du réseau.');
+      setPanier([]); setCliente({ nom: '', telephone: '' }); setMontantPaye(''); setStatutPaiement('paye'); setModePaiement('cash');
+      onVente();
+      setTimeout(() => setSucces(''), 6000);
+    };
+    if (typeof navigator !== 'undefined' && !navigator.onLine) { mettreEnAttente(); setEnregistrement(false); return; }
     try {
       const envoyer = async (autorisation: string | null) => {
         const r = await fetch('/api/ventes', {
@@ -65,7 +82,9 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
         });
         return { reponse: r, resultat: await r.json().catch(() => ({})) };
       };
-      let { reponse, resultat } = await envoyer(null);
+      let premier;
+      try { premier = await envoyer(null); } catch { mettreEnAttente(); return; } // reseau coupe en cours de route
+      let { reponse, resultat } = premier;
       // Credit : la base exige le code du gerant.
       if (!reponse.ok && validationRequise(resultat.message)) {
         const jeton = await demander('credit', null, resteAPayer, `Crédit pour ${cliente.nom.trim()} (reste à payer)`);
@@ -75,10 +94,8 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
       }
       if (!reponse.ok) { setErreur(resultat.message || 'Erreur lors de l\'enregistrement.'); return; }
 
-      const numero = `${new Date().getFullYear()}-${String(resultat?.id ?? '').padStart(4, '0')}`;
       setRecu({
-        boutique: boutiqueNom, numero,
-        date: new Date().toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        ...entete, numero: numeroRecu(resultat?.id ?? ''), date: dateRecu(),
         vendeuse: user?.nom || '', client: cliente.nom.trim(), telephone: cliente.telephone || null,
         items: panier.map(p => ({ nom: p.nom, quantite: p.quantite, prix: p.prix })),
         total, paye: montantEffectif, reste: resteAPayer, mode: modePaiement, statut: statutPaiement,
@@ -86,6 +103,7 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
       setSucces('Vente enregistrée avec succès !');
       setPanier([]); setCliente({ nom: '', telephone: '' }); setMontantPaye(''); setStatutPaiement('paye'); setModePaiement('cash');
       await rechargerProduits();
+      onVente();
       setTimeout(() => setSucces(''), 4000);
     } catch { setErreur('Erreur inattendue. Veuillez réessayer.'); }
     finally { setEnregistrement(false); }
@@ -183,18 +201,7 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
       </div>
 
       {fenetreGerant}
-      {recu && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(16,24,40,.5)', display: 'flex', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
-          <div style={{ width: '100%', maxWidth: '400px', margin: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
-              <div ref={recuRef} style={{ borderRadius: '16px', overflow: 'hidden', boxShadow: '0 20px 50px rgba(16,24,40,.28)' }}><Recu data={recu} /></div>
-            </div>
-            <button onClick={async () => { if (recuRef.current) await partagerImageRecu(recuRef.current, recu); }} style={{ height: '52px', border: 'none', borderRadius: '14px', cursor: 'pointer', background: GRAD, color: '#fff', fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', boxShadow: '0 8px 18px rgba(37,99,235,.28)' }}><span className="ms" style={{ fontSize: '20px' }}>ios_share</span>Partager le reçu (WhatsApp)</button>
-            <button onClick={() => whatsappTexte(recu)} style={{ height: '46px', border: '1px solid rgba(37,99,235,.3)', borderRadius: '13px', cursor: 'pointer', background: '#fff', color: BLUE, fontSize: '13.5px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><span className="ms" style={{ fontSize: '18px' }}>chat</span>Envoyer en texte</button>
-            <button onClick={() => setRecu(null)} style={{ height: '46px', border: `1px solid ${LINE}`, borderRadius: '13px', cursor: 'pointer', background: '#fff', color: SOFT, fontSize: '14px', fontWeight: 600 }}>Nouvelle vente</button>
-          </div>
-        </div>
-      )}
+      {recu && <RecuModal data={recu} onClose={() => setRecu(null)} libelleFermer="Nouvelle vente" />}
     </div>
   );
 }

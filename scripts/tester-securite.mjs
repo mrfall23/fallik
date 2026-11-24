@@ -230,6 +230,15 @@ try {
   const clo = await vendA.client.rpc('cloturer_caisse', { p_especes: 0 });
   verifier('vendeuse A cloture sa caisse (attendu calcule par la base)', !clo.error && Number(clo.data?.attendu_especes) === 1000, JSON.stringify(clo.data || clo.error?.message));
   verifier("vendeuse A ne fait pas d'inventaire", !!(await vendA.client.rpc('enregistrer_inventaire', { p_lignes: [{ produit_id: prodA, compte: 0 }], p_appliquer: true })).error);
+  // Creances et annulation de vente (gerant seulement, ecritures directes fermees).
+  verifier('vendeuse A n\'annule pas une vente', !!(await vendA.client.rpc('annuler_vente', { p_vente_id: rA.data, p_motif: 'test' })).error);
+  verifier('proprietaire B n\'annule pas une vente de A', !!(await propB.client.rpc('annuler_vente', { p_vente_id: rA.data, p_motif: 'pirate' })).error);
+  verifier('gerant A ne modifie pas une vente directement', bloque(await gerantA.client.from('ventes').update({ total: 1 }).eq('id', rA.data).select()));
+  verifier('gerant A n\'ajoute pas de paiement directement', bloque(await gerantA.client.from('paiements').insert({ vente_id: rA.data, montant: 1 }).select()));
+  verifier('proprietaire B n\'encaisse pas une dette de A', !!(await propB.client.rpc('enregistrer_paiement', { p_vente_id: rA.data, p_montant: 1, p_mode: 'cash' })).error);
+  const annV = await gerantA.client.rpc('annuler_vente', { p_vente_id: rA.data, p_motif: 'Test intrusion' });
+  verifier('gerant A annule une vente avec motif', !annV.error && annV.data?.articles_remis === 1, annV.error?.message);
+
   // Telephone caisse : connexion par code, sans mot de passe.
   const jeton = 'c'.repeat(64);
   verifier('gerant A active un poste caisse', !(await gerantA.client.rpc('creer_poste_caisse', { p_nom: 'Test', p_jeton_hash: jeton })).error);

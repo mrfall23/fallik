@@ -1,14 +1,39 @@
-import { toBlob } from 'html-to-image';
+import { toBlob, toPng } from 'html-to-image';
 import type { RecuData } from './Recu';
 
-const MODE: Record<string, string> = { cash: 'Espèces', mobile_money: 'Mobile Money', orange_money: 'Orange Money' };
+const MODE: Record<string, string> = { cash: 'Espèces', mobile_money: 'Mobile Money', orange_money: 'Orange Money', carte: 'Carte', autre: 'Autre' };
 const fmt = (n: number) => n.toLocaleString('fr-FR');
 
 /** Version texte du reçu (marche avec n'importe quel numero, meme non enregistre). */
 export function texteRecu(d: RecuData): string {
+  const dev = d.devise || 'FCFA';
   const lignes = d.items.map(it => `• ${it.quantite}× ${it.nom} : ${fmt(it.prix * it.quantite)}`).join('\n');
-  const reste = d.reste > 0 ? `\nReste à payer : ${fmt(d.reste)} FCFA` : '';
-  return `*${d.boutique}* — Reçu ${d.numero}\n${d.date}\nClient : ${d.client}\n\n${lignes}\n\n*TOTAL : ${fmt(d.total)} FCFA*\nPayé (${MODE[d.mode] || d.mode}) : ${fmt(d.paye)} FCFA${reste}\n\nMerci de votre achat 💛`;
+  const reste = d.reste > 0 ? `\nReste à payer : ${fmt(d.reste)} ${dev}` : '';
+  const contact = d.contact ? `\n${d.contact}` : '';
+  return `*${d.boutique}* — Reçu ${d.numero}\n${d.date}\nClient : ${d.client}\n\n${lignes}\n\n*TOTAL : ${fmt(d.total)} ${dev}*\nPayé (${MODE[d.mode] || d.mode}) : ${fmt(d.paye)} ${dev}${reste}\n\nMerci de votre achat 💛${contact}`;
+}
+
+/** Telecharge le recu en PDF (image du recu ; jsPDF n'est charge qu'au clic). */
+export async function telechargerPdfRecu(node: HTMLElement, d: RecuData): Promise<boolean> {
+  let dataUrl: string;
+  try {
+    dataUrl = await toPng(node, { pixelRatio: 2, backgroundColor: '#FCFDFF', cacheBust: true });
+  } catch {
+    return false;
+  }
+  const img = new Image();
+  try {
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
+  } catch {
+    return false;
+  }
+  const largeur = img.naturalWidth || img.width;
+  const hauteur = img.naturalHeight || img.height;
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ unit: 'px', format: [largeur, hauteur], orientation: hauteur >= largeur ? 'portrait' : 'landscape' });
+  pdf.addImage(dataUrl, 'PNG', 0, 0, largeur, hauteur);
+  pdf.save(`recu-${d.numero}.pdf`);
+  return true;
 }
 
 /**

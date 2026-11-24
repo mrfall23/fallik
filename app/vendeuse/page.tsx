@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useUtilisateur, seDeconnecter, estModeCaisse } from '@/lib/utilisateur';
 import { useIsMobile } from '../components/useMediaQuery';
@@ -7,6 +7,11 @@ import { FallikLogo } from '../components/Logo';
 import VenteRapide from './VenteRapide';
 import FactureDetail from './FactureDetail';
 import ClotureCaisse from './ClotureCaisse';
+import MesVentes from './MesVentes';
+import RecuModal, { enteteRecu } from '../components/RecuModal';
+import { type RecuData } from '../components/Recu';
+import { lireBoutique, type Boutique } from '@/lib/boutique';
+import { lireFile, ecrireFile, type VenteEnAttente } from '@/lib/fileHorsLigne';
 
 // Telephone caisse partage : sans activite, on revient a l'ecran « Qui vend ? »
 // pour qu'une collegue ne vende pas sous le nom d'une autre.
@@ -20,9 +25,15 @@ export default function VendeusePage() {
   const isMobile = useIsMobile();
   const [produits, setProduits] = useState<any[]>([]);
   const [factures, setFactures] = useState<any[]>([]);
-  const [boutiqueNom, setBoutiqueNom] = useState('Ma boutique');
+  const [boutique, setBoutique] = useState<Boutique | null>(null);
   const [chargement, setChargement] = useState(true);
-  const [vue, setVue] = useState<'factures' | 'rapide'>('factures');
+  const [vue, setVue] = useState<'factures' | 'rapide' | 'historique'>('factures');
+  const [recuHisto, setRecuHisto] = useState<RecuData | null>(null);
+  const [versionHisto, setVersionHisto] = useState(0); // recharge « Mes ventes »
+  const [enLigne, setEnLigne] = useState(true);
+  const [enAttente, setEnAttente] = useState<VenteEnAttente[]>([]);
+  const [synchro, setSynchro] = useState(false);
+  const syncRef = useRef(false);
   const [factureActive, setFactureActive] = useState<number | null>(null);
   const [saisieNom, setSaisieNom] = useState(false);
   const [nomClient, setNomClient] = useState('');
@@ -39,9 +50,54 @@ export default function VendeusePage() {
   }, []);
 
   const chargerProduits = async () => {
-    const { data } = await supabase.from('produits').select('*').order('nom');
+    const { data } = await supabase.from('produits').select('*').eq('actif', true).order('nom');
     setProduits(data || []);
   };
+
+  // Ventes faites hors ligne sur CE telephone, au nom de la vendeuse connectee
+  // (sur une caisse partagee, on n'envoie jamais la vente d'une collegue sous
+  // un autre nom : elle partira quand elle se reconnectera).
+  const mesAttentes = useCallback(() => lireFile().filter(v => v.utilisateur_id === user?.id), [user?.id]);
+
+  const synchroniser = useCallback(async () => {
+    if (syncRef.current || !navigator.onLine || !user) return;
+    const miennes = mesAttentes();
+    if (miennes.length === 0) { setEnAttente([]); return; }
+    syncRef.current = true; setSynchro(true);
+    const envoyees = new Set<string>();
+    const refuses: string[] = [];
+    try {
+      for (const item of miennes) {
+        try {
+          const rep = await fetch('/api/ventes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item.payload) });
+          if (rep.ok) { envoyees.add(item.id); continue; }
+          const r = await rep.json().catch(() => ({}));
+          refuses.push(`${item.apercu.cliente} : ${r.message || 'refusée'}`);
+          envoyees.add(item.id); // refusee par la base : on la retire, la vendeuse est prevenue
+        } catch {
+          // reseau encore coupe : on la garde
+        }
+      }
+      ecrireFile(lireFile().filter(v => !envoyees.has(v.id)));
+      setEnAttente(mesAttentes());
+      if (refuses.length) setErreur(`${refuses.length} vente(s) hors ligne refusée(s) — ${refuses.join(' ; ')}`);
+      await chargerProduits();
+      setVersionHisto(x => x + 1);
+    } finally {
+      syncRef.current = false; setSynchro(false);
+    }
+  }, [mesAttentes, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const majEtat = () => { setEnLigne(navigator.onLine); setEnAttente(mesAttentes()); };
+    const auRetour = () => { setEnLigne(true); synchroniser(); };
+    const aLaPerte = () => setEnLigne(false);
+    window.addEventListener('online', auRetour);
+    window.addEventListener('offline', aLaPerte);
+    const t = setTimeout(() => { majEtat(); synchroniser(); }, 0);
+    return () => { clearTimeout(t); window.removeEventListener('online', auRetour); window.removeEventListener('offline', aLaPerte); };
+  }, [user, mesAttentes, synchroniser]);
   const chargerFactures = async () => {
     const { data } = await supabase
       .from('factures')
@@ -53,8 +109,7 @@ export default function VendeusePage() {
 
   useEffect(() => {
     (async () => {
-      const { data: org } = await supabase.from('organisations').select('nom').limit(1).single();
-      if (org?.nom) setBoutiqueNom(org.nom);
+      setBoutique(await lireBoutique());
       await Promise.all([chargerProduits(), chargerFactures()]);
       setChargement(false);
     })();
@@ -72,12 +127,16 @@ export default function VendeusePage() {
 
   const revenir = async () => {
     setFactureActive(null);
+    setVersionHisto(x => x + 1);
     await Promise.all([chargerProduits(), chargerFactures()]);
   };
 
   // Une vendeuse ne voit (et ne touche) que SES factures ; le gerant voit tout.
   const gestion = user?.role === 'admin' || user?.role === 'proprietaire';
   const visibles = factures.filter(f => gestion || f.vendeuse_id === user?.id);
+
+  const entete = enteteRecu(boutique);
+  const ONGLETS = { factures: ['receipt_long', 'Factures ouvertes', 'Factures'], rapide: ['bolt', 'Vente rapide', 'Rapide'], historique: ['history', 'Mes ventes', 'Mes ventes'] } as const;
 
   const nbArticles = (f: any) => (f.facture_lignes || []).reduce((s: number, l: any) => s + (l.quantite || 0), 0);
 
@@ -89,7 +148,7 @@ export default function VendeusePage() {
           <FallikLogo size={40} shadow />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '17px', fontWeight: 800, color: INK, lineHeight: 1 }}>Fallik</div>
-            <div style={{ fontSize: '11.5px', fontWeight: 600, color: MUTE, marginTop: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{boutiqueNom}</div>
+            <div style={{ fontSize: '11.5px', fontWeight: 600, color: MUTE, marginTop: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{boutique?.nom || 'Ma boutique'}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
@@ -109,27 +168,41 @@ export default function VendeusePage() {
       </header>
 
       {cloture && <ClotureCaisse onFermer={() => setCloture(false)} />}
+      {recuHisto && <RecuModal data={recuHisto} onClose={() => setRecuHisto(null)} />}
+
+      {(!enLigne || enAttente.length > 0) && (
+        <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '10px', padding: '9px 16px', background: enLigne ? 'rgba(200,137,31,.12)' : 'rgba(210,68,68,.10)', color: enLigne ? '#9A6A14' : '#D24444', fontSize: '13px', fontWeight: 600 }}>
+          <span className="ms" style={{ fontSize: '18px' }}>{enLigne ? 'cloud_upload' : 'cloud_off'}</span>
+          {enLigne ? `${enAttente.length} vente(s) hors ligne à envoyer` : `Pas de connexion — les ventes rapides payées restent sur ce téléphone${enAttente.length ? ` (${enAttente.length} en attente)` : ''}`}
+          {enLigne && enAttente.length > 0 && (
+            <button onClick={synchroniser} disabled={synchro} style={{ height: '30px', padding: '0 12px', borderRadius: '8px', border: 'none', background: BLUE, color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', opacity: synchro ? 0.6 : 1 }}>{synchro ? 'Envoi…' : 'Envoyer'}</button>
+          )}
+        </div>
+      )}
 
       {chargement ? (
         <div style={{ textAlign: 'center', padding: '80px', color: MUTE }}>Chargement…</div>
       ) : factureActive ? (
-        <FactureDetail factureId={factureActive} produits={produits} rechargerProduits={chargerProduits} user={user} isMobile={isMobile} boutiqueNom={boutiqueNom} onRetour={revenir} />
+        <FactureDetail factureId={factureActive} produits={produits} rechargerProduits={chargerProduits} user={user} isMobile={isMobile} entete={entete} onRetour={revenir} />
       ) : (
         <>
           {/* Bascule */}
           <div style={{ display: 'flex', padding: isMobile ? '16px 16px 0' : '22px 32px 0', maxWidth: '1400px', margin: '0 auto' }}>
             <div style={{ display: 'flex', gap: '2px', background: '#EEF1F7', borderRadius: '13px', padding: '4px' }}>
-              {(['factures', 'rapide'] as const).map(v => (
-                <button key={v} onClick={() => setVue(v)} style={{ height: '40px', padding: '0 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '13.5px', fontWeight: 700, background: vue === v ? '#fff' : 'transparent', color: vue === v ? BLUE : SOFT, boxShadow: vue === v ? '0 1px 3px rgba(26,36,56,.12)' : 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="ms" style={{ fontSize: '19px' }}>{v === 'factures' ? 'receipt_long' : 'bolt'}</span>
-                  {v === 'factures' ? 'Factures ouvertes' : 'Vente rapide'}
+              {(['factures', 'rapide', 'historique'] as const).map(v => (
+                <button key={v} onClick={() => setVue(v)} style={{ height: '40px', padding: isMobile ? '0 11px' : '0 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '13.5px', fontWeight: 700, background: vue === v ? '#fff' : 'transparent', color: vue === v ? BLUE : SOFT, boxShadow: vue === v ? '0 1px 3px rgba(26,36,56,.12)' : 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="ms" style={{ fontSize: '19px' }}>{ONGLETS[v][0]}</span>
+                  {isMobile ? ONGLETS[v][2] : ONGLETS[v][1]}
                 </button>
               ))}
             </div>
           </div>
 
-          {vue === 'rapide' ? (
-            <VenteRapide produits={produits} rechargerProduits={chargerProduits} user={user} isMobile={isMobile} boutiqueNom={boutiqueNom} />
+          {vue === 'historique' ? (
+            <MesVentes isMobile={isMobile} vendeuseNom={user?.nom || ''} enAttente={enAttente} rafraichir={versionHisto} entete={entete} onRecu={setRecuHisto} />
+          ) : vue === 'rapide' ? (
+            <VenteRapide produits={produits} rechargerProduits={chargerProduits} user={user} isMobile={isMobile} entete={entete}
+              onVente={() => { setEnAttente(mesAttentes()); setVersionHisto(x => x + 1); }} />
           ) : (
             <div style={{ padding: isMobile ? '16px' : '22px 32px', maxWidth: '1400px', margin: '0 auto' }}>
               {/* Nouvelle facture */}

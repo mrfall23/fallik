@@ -2,6 +2,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useIsMobile } from '../../components/useMediaQuery';
+import { toutLire, lireParIds } from '@/lib/requetes';
+import { useBoutique } from '@/lib/boutique';
+import { signalerAuPatron } from '../../components/ValidationGerant';
+
+const MODES: [string, string][] = [['cash', 'Espèces'], ['mobile_money', 'Mobile Money'], ['orange_money', 'Orange Money'], ['carte', 'Carte'], ['autre', 'Autre']];
 
 type Cliente = { id: number; nom: string; telephone: string | null; created_at: string; nbVentes: number; totalDepense: number; resteAPayer: number; derniereVisite: string | null };
 
@@ -18,15 +23,24 @@ export default function AdminClients() {
   const [clienteSelectee, setClienteSelectee] = useState<Cliente | null>(null);
   const [ventesCliente, setVentesCliente] = useState<any[]>([]);
   const [chargementDetail, setChargementDetail] = useState(false);
+  const [filtreDette, setFiltreDette] = useState(false);
+  // Encaissement d'un acompte sur une dette (creance).
+  const [venteEncaisse, setVenteEncaisse] = useState<number | null>(null);
+  const [montantAcompte, setMontantAcompte] = useState('');
+  const [modeAcompte, setModeAcompte] = useState('cash');
+  const [erreurAcompte, setErreurAcompte] = useState('');
+  const [enregistrement, setEnregistrement] = useState(false);
   const isMobile = useIsMobile();
+  const boutique = useBoutique();
 
   useEffect(() => { chargerClientes(); }, []);
 
   const chargerClientes = async () => {
-    const { data: clientesData } = await supabase.from('clientes').select('*').order('nom');
-    if (!clientesData || clientesData.length === 0) { setClientes([]); setChargement(false); return; }
-    const clienteIds = clientesData.map((c: any) => c.id);
-    const { data: ventes } = await supabase.from('ventes').select('id, cliente_id, total, reste_a_payer, date_vente').eq('annulee', false).in('cliente_id', clienteIds);
+    // Lecture complete (au-dela de 1000 lignes, Supabase tronque sans prevenir).
+    const clientesData = await toutLire<any>(() => supabase.from('clientes').select('*').order('nom').order('id'));
+    if (clientesData.length === 0) { setClientes([]); setChargement(false); return; }
+    const ventes = (await lireParIds<any>('ventes', 'id, cliente_id, total, reste_a_payer, date_vente, annulee', 'cliente_id', clientesData.map((c: any) => c.id)))
+      .filter(v => !v.annulee);
     setClientes(clientesData.map((c: any) => {
       const vv = (ventes || []).filter((v: any) => v.cliente_id === c.id);
       const dates = vv.map((v: any) => v.date_vente).sort().reverse();
@@ -50,7 +64,35 @@ export default function AdminClients() {
     setChargementDetail(false);
   };
 
-  const filtrees = clientes.filter(c => c.nom.toLowerCase().includes(recherche.toLowerCase()) || (c.telephone && c.telephone.includes(recherche)));
+  const filtrees = clientes
+    .filter(c => !filtreDette || c.resteAPayer > 0)
+    .filter(c => c.nom.toLowerCase().includes(recherche.toLowerCase()) || (c.telephone && c.telephone.includes(recherche)))
+    .sort((a, b) => (filtreDette ? b.resteAPayer - a.resteAPayer : 0));
+
+  const encaisserAcompte = async (v: any) => {
+    const montant = Number(montantAcompte);
+    if (!montant || montant <= 0) { setErreurAcompte('Entrez un montant.'); return; }
+    setEnregistrement(true); setErreurAcompte('');
+    const { error } = await supabase.rpc('enregistrer_paiement', { p_vente_id: v.id, p_montant: montant, p_mode: modeAcompte });
+    setEnregistrement(false);
+    if (error) { setErreurAcompte(error.message || 'Échec.'); return; }
+    setVenteEncaisse(null);
+    signalerAuPatron();
+    await chargerClientes();
+    if (clienteSelectee) {
+      const sel = clienteSelectee;
+      setClienteSelectee(null);
+      await voirDetail({ ...sel, resteAPayer: Math.max(0, sel.resteAPayer - montant) });
+    }
+  };
+
+  // Relance WhatsApp pre-remplie (numero camerounais a 9 chiffres -> +237).
+  const relancer = (c: Cliente) => {
+    let num = (c.telephone || '').replace(/[^0-9]/g, '');
+    if (num.length === 9) num = '237' + num;
+    const texte = `Bonjour ${c.nom}, petit rappel de ${boutique?.nom || 'la boutique'} : il reste ${fmt(c.resteAPayer)} ${boutique?.devise || 'FCFA'} à régler. Merci !`;
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(texte)}`, '_blank');
+  };
   const totalCA = clientes.reduce((s, c) => s + c.totalDepense, 0);
   const totalAttente = clientes.reduce((s, c) => s + c.resteAPayer, 0);
 
@@ -78,9 +120,14 @@ export default function AdminClients() {
       </div>
 
       {/* Recherche */}
-      <div style={{ position: 'relative', maxWidth: '420px', marginBottom: '16px' }}>
-        <span className="ms" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '20px', color: MUTE }}>search</span>
-        <input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="Rechercher par nom ou téléphone…" aria-label="Rechercher une cliente" style={{ height: '46px', width: '100%', padding: '0 14px 0 44px', borderRadius: '13px', border: '1px solid #E4E9F2', background: '#fff', outline: 'none', color: INK, fontSize: '14px' }} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '16px' }}>
+        <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: '420px' }}>
+          <span className="ms" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '20px', color: MUTE }}>search</span>
+          <input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="Rechercher par nom ou téléphone…" aria-label="Rechercher une cliente" style={{ height: '46px', width: '100%', padding: '0 14px 0 44px', borderRadius: '13px', border: '1px solid #E4E9F2', background: '#fff', outline: 'none', color: INK, fontSize: '14px' }} />
+        </div>
+        <button onClick={() => setFiltreDette(!filtreDette)} aria-pressed={filtreDette} style={{ height: '46px', padding: '0 16px', borderRadius: '13px', cursor: 'pointer', fontSize: '13.5px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '7px', border: `1px solid ${filtreDette ? 'rgba(200,137,31,.45)' : '#E4E9F2'}`, background: filtreDette ? 'rgba(200,137,31,.12)' : '#fff', color: filtreDette ? '#C8891F' : SOFT }}>
+          <span className="ms" style={{ fontSize: '18px' }}>pending_actions</span>Clients qui doivent de l&apos;argent
+        </button>
       </div>
 
       {/* 2-col layout */}
@@ -157,6 +204,11 @@ export default function AdminClients() {
                   </div>
                 ))}
               </div>
+              {clienteSelectee.resteAPayer > 0 && clienteSelectee.telephone && (
+                <button onClick={() => relancer(clienteSelectee)} style={{ marginTop: '12px', width: '100%', height: '40px', borderRadius: '11px', border: 'none', background: '#1F9D6B', color: '#fff', fontSize: '13.5px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' }}>
+                  <span className="ms" style={{ fontSize: '18px' }}>chat</span>Relancer sur WhatsApp
+                </button>
+              )}
             </div>
             <div style={{ padding: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '13px', fontWeight: 700, color: INK }}>
@@ -180,6 +232,21 @@ export default function AdminClients() {
                           <span style={v.statut_paiement === 'paye' ? BADGE_PAID : BADGE_PART}>{v.statut_paiement === 'paye' ? 'Payé' : `Reste : ${fmt(v.reste_a_payer)}`}</span>
                         </div>
                       </div>
+                      {v.reste_a_payer > 0 && (venteEncaisse === v.id ? (
+                        <div style={{ margin: '8px 0', padding: '10px', borderRadius: '11px', background: '#fff', border: `1px solid ${LINE}` }}>
+                          <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                            <input type="number" inputMode="numeric" min="1" value={montantAcompte} onChange={e => setMontantAcompte(e.target.value)} aria-label="Montant encaissé" style={{ flex: 1, minWidth: 0, height: '36px', padding: '0 10px', borderRadius: '9px', border: '1px solid #E4E9F2', fontSize: '13px', color: INK }} />
+                            <select value={modeAcompte} onChange={e => setModeAcompte(e.target.value)} aria-label="Moyen de paiement" style={{ height: '36px', borderRadius: '9px', border: '1px solid #E4E9F2', fontSize: '12.5px', color: INK }}>{MODES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                          </div>
+                          {erreurAcompte && <div role="alert" style={{ color: '#D24444', fontSize: '12px', marginBottom: '6px' }}>{erreurAcompte}</div>}
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button disabled={enregistrement} onClick={() => encaisserAcompte(v)} style={{ flex: 1, height: '34px', borderRadius: '9px', border: 'none', background: GRAD, color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>{enregistrement ? '…' : 'Encaisser'}</button>
+                            <button onClick={() => setVenteEncaisse(null)} style={{ height: '34px', padding: '0 12px', borderRadius: '9px', border: `1px solid ${LINE}`, background: '#fff', color: SOFT, fontSize: '12.5px', cursor: 'pointer' }}>Retour</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setVenteEncaisse(v.id); setMontantAcompte(String(Math.round(v.reste_a_payer))); setModeAcompte('cash'); setErreurAcompte(''); }} style={{ margin: '6px 0 8px', height: '32px', padding: '0 12px', borderRadius: '9px', border: 'none', background: 'rgba(31,157,107,.12)', color: '#1F9D6B', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}>Encaisser un paiement</button>
+                      ))}
                       {v.vente_produits?.length > 0 && (
                         <div style={{ borderTop: '1px solid #F1F4FA', paddingTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           {v.vente_produits.map((vp: any, i: number) => (

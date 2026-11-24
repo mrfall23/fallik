@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import Recu, { type RecuData } from '../components/Recu';
-import { partagerImageRecu, whatsappTexte } from '../components/recuPartage';
+import { type RecuData } from '../components/Recu';
+import RecuModal, { dateRecu, numeroRecu, type EnteteRecu } from '../components/RecuModal';
 import { useValidationGerant, validationRequise, signalerAuPatron, type ActionSensible } from '../components/ValidationGerant';
 
 const MODES: [string, string][] = [['cash', 'Espèces'], ['mobile_money', 'Mobile Money'], ['orange_money', 'Orange Money'], ['carte', 'Carte'], ['autre', 'Autre']];
@@ -11,8 +11,8 @@ const INK = '#1A2438', BLUE = '#2563EB', GRAD = 'linear-gradient(135deg,#4B7DF5,
 
 // Détail d'une facture ouverte (mode bar) : ajout/retrait de produits en temps
 // réel (stock géré en base), puis encaissement -> reçu.
-export default function FactureDetail({ factureId, produits, rechargerProduits, user, isMobile, boutiqueNom, onRetour }: {
-  factureId: number; produits: any[]; rechargerProduits: () => Promise<void>; user: any; isMobile: boolean; boutiqueNom: string; onRetour: () => void;
+export default function FactureDetail({ factureId, produits, rechargerProduits, user, isMobile, entete, onRetour }: {
+  factureId: number; produits: any[]; rechargerProduits: () => Promise<void>; user: any; isMobile: boolean; entete: EnteteRecu; onRetour: () => void;
 }) {
   const [facture, setFacture] = useState<any>(null);
   const [lignes, setLignes] = useState<any[]>([]);
@@ -23,7 +23,6 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
   const [montant, setMontant] = useState<number | ''>('');
   const [telephone, setTelephone] = useState('');
   const [recu, setRecu] = useState<RecuData | null>(null);
-  const recuRef = useRef<HTMLDivElement>(null);
 
   const charger = useCallback(async () => {
     const { data: f } = await supabase.from('factures').select('*').eq('id', factureId).single();
@@ -91,9 +90,7 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
     );
     if (error) { setErreur(error.message); setBusy(false); return; }
     setRecu({
-      boutique: boutiqueNom,
-      numero: `${new Date().getFullYear()}-${String(venteId).padStart(4, '0')}`,
-      date: new Date().toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      ...entete, numero: numeroRecu(venteId), date: dateRecu(),
       vendeuse: user?.nom || '', client: facture?.nom_client || '', telephone: telephone || null,
       items: lignes.map(l => ({ nom: (l.produits?.nom) || 'Produit', quantite: l.quantite, prix: Number(l.prix_unitaire) })),
       total, paye, reste: Math.max(0, total - paye), mode, statut: paye >= total ? 'paye' : 'partiel',
@@ -204,18 +201,7 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
       {fenetreGerant}
 
       {/* Reçu après encaissement */}
-      {recu && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(16,24,40,.5)', display: 'flex', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
-          <div style={{ width: '100%', maxWidth: '400px', margin: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
-              <div ref={recuRef} style={{ borderRadius: '16px', overflow: 'hidden', boxShadow: '0 20px 50px rgba(16,24,40,.28)' }}><Recu data={recu} /></div>
-            </div>
-            <button onClick={async () => { if (recuRef.current) await partagerImageRecu(recuRef.current, recu); }} style={{ height: '52px', border: 'none', borderRadius: '14px', cursor: 'pointer', background: GRAD, color: '#fff', fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', boxShadow: '0 8px 18px rgba(37,99,235,.28)' }}><span className="ms" style={{ fontSize: '20px' }}>ios_share</span>Partager le reçu (WhatsApp)</button>
-            <button onClick={() => whatsappTexte(recu)} style={{ height: '46px', border: '1px solid rgba(37,99,235,.3)', borderRadius: '13px', cursor: 'pointer', background: '#fff', color: BLUE, fontSize: '13.5px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><span className="ms" style={{ fontSize: '18px' }}>chat</span>Envoyer en texte</button>
-            <button onClick={onRetour} style={{ height: '46px', border: `1px solid ${LINE}`, borderRadius: '13px', cursor: 'pointer', background: '#fff', color: SOFT, fontSize: '14px', fontWeight: 600 }}>Terminé</button>
-          </div>
-        </div>
-      )}
+      {recu && <RecuModal data={recu} onClose={onRetour} libelleFermer="Terminé" />}
     </div>
   );
 }

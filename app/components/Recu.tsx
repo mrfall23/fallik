@@ -17,24 +17,35 @@ export type RecuData = {
   reste: number;
   mode: string;      // cash | mobile_money | orange_money
   statut: string;    // paye | partiel
+  // Reglages de la boutique (Parametres -> Ma boutique).
+  logo?: string | null;     // URL du logo ; a defaut, le logo Fallik
+  contact?: string | null;  // telephone · adresse
+  devise?: string;          // FCFA par defaut
 };
 
 const MODE_LABEL: Record<string, string> = {
   cash: 'Espèces',
   mobile_money: 'Mobile Money',
   orange_money: 'Orange Money',
+  carte: 'Carte',
+  autre: 'Autre',
 };
 
 const fmt = (n: number) => n.toLocaleString('fr-FR');
 
 export default function Recu({ data }: { data: RecuData }) {
+  const dev = data.devise || 'FCFA';
   return (
     <div style={{ width: '360px', background: '#FCFDFF', color: '#1A2438', fontFamily: "'Manrope', system-ui, sans-serif", padding: '26px 24px 22px', boxSizing: 'border-box' }}>
       {/* En-tete : logo + boutique */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px', paddingBottom: '18px', borderBottom: '1.5px solid rgba(26,36,56,.18)' }}>
-        <FallikLogo size={44} />
+        {data.logo
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={data.logo} alt="" crossOrigin="anonymous" style={{ maxWidth: '120px', maxHeight: '56px', objectFit: 'contain' }} />
+          : <FallikLogo size={44} />}
         <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: '30px', fontWeight: 600, letterSpacing: '1px', lineHeight: 1, color: '#1A2438' }}>{data.boutique}</div>
-        <div style={{ fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', color: '#2563EB', fontWeight: 600 }}>Reçu d'achat</div>
+        <div style={{ fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', color: '#2563EB', fontWeight: 600 }}>Reçu d&apos;achat</div>
+        {data.contact ? <div style={{ fontSize: '11px', color: 'rgba(26,36,56,.6)' }}>{data.contact}</div> : null}
       </div>
 
       {/* Meta : numero, date, vendeuse, client */}
@@ -64,17 +75,17 @@ export default function Recu({ data }: { data: RecuData }) {
           <span style={{ fontSize: '14px', fontWeight: 700 }}>TOTAL</span>
           <span>
             <span style={{ fontSize: '24px', fontWeight: 800 }}>{fmt(data.total)}</span>
-            <span style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700, marginLeft: '4px' }}>FCFA</span>
+            <span style={{ fontSize: '12px', color: '#2563EB', fontWeight: 700, marginLeft: '4px' }}>{dev}</span>
           </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: 'rgba(26,36,56,.7)', marginTop: '8px' }}>
           <span>Payé ({MODE_LABEL[data.mode] || data.mode})</span>
-          <span style={{ fontWeight: 600 }}>{fmt(data.paye)} FCFA</span>
+          <span style={{ fontWeight: 600 }}>{fmt(data.paye)} {dev}</span>
         </div>
         {data.reste > 0 ? (
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#C8891F', fontWeight: 700, marginTop: '4px' }}>
             <span>Reste à payer</span>
-            <span>{fmt(data.reste)} FCFA</span>
+            <span>{fmt(data.reste)} {dev}</span>
           </div>
         ) : (
           <div style={{ marginTop: '8px', textAlign: 'center', fontSize: '11.5px', fontWeight: 700, color: '#1F9D6B', background: 'rgba(31,157,107,.12)', border: '1px solid rgba(31,157,107,.28)', borderRadius: '8px', padding: '5px' }}>
