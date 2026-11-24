@@ -20,6 +20,7 @@ export const ICONES_JOURNAL: Record<string, string> = {
   prix_modifie: 'sell', produit_cree: 'add_box', produit_supprime: 'delete', cloture_caisse: 'point_of_sale',
   inventaire: 'fact_check', connexion_caisse: 'login', caisse_compte_bloque: 'lock',
   poste_caisse_active: 'smartphone', poste_caisse_retire: 'mobile_off', pin_modifie: 'pin', pin_vendeuse_modifie: 'pin',
+  periode_cloturee: 'restart_alt', objectif_defini: 'flag',
 };
 
 export function decrireEvenement(j: LigneJournal): string {
@@ -49,6 +50,8 @@ export function decrireEvenement(j: LigneJournal): string {
     case 'caisse_compte_bloque': return `${qui} : 5 codes faux sur la caisse « ${d.poste} », compte bloqué 15 min`;
     case 'poste_caisse_active': return `${qui} a activé un téléphone caisse « ${d.poste} »`;
     case 'poste_caisse_retire': return `${qui} a retiré le téléphone caisse « ${d.poste} »`;
+    case 'periode_cloturee': return `${qui} a clôturé la période « ${d.periode} » : ${f(j.montant)} FCFA sur ${d.ventes} vente(s), compteurs remis à zéro`;
+    case 'objectif_defini': return j.montant ? `${qui} a fixé l'objectif de ${d.vendeuse} pour ${d.mois} : ${f(j.montant)} FCFA` : `${qui} a retiré l'objectif de ${d.vendeuse} pour ${d.mois}`;
     case 'pin_modifie': return `${qui} a changé son code PIN`;
     case 'pin_vendeuse_modifie': return `${qui} a défini le code PIN de ${d.vendeuse}`;
     default: return `${qui} : ${j.action}`;

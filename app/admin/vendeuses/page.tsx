@@ -1,6 +1,7 @@
 'use client';
 import { Fragment, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import Objectifs from './Objectifs';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const INK = '#1A2438', BLUE = '#2563EB', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
@@ -64,6 +65,7 @@ export default function AdminVendeuses() {
 
   return (
     <div className="fade-up">
+      <Objectifs />
       {/* Podium top 3 */}
       {vendeuses.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '18px', marginBottom: '20px' }}>

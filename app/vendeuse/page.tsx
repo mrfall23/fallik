@@ -8,6 +8,7 @@ import VenteRapide from './VenteRapide';
 import FactureDetail from './FactureDetail';
 import ClotureCaisse from './ClotureCaisse';
 import MesVentes from './MesVentes';
+import MonObjectif from './MonObjectif';
 import RecuModal, { enteteRecu } from '../components/RecuModal';
 import { type RecuData } from '../components/Recu';
 import { lireBoutique, type Boutique } from '@/lib/boutique';
@@ -197,6 +198,8 @@ export default function VendeusePage() {
               ))}
             </div>
           </div>
+
+          <MonObjectif rafraichir={versionHisto} devise={boutique?.devise || 'FCFA'} isMobile={isMobile} />
 
           {vue === 'historique' ? (
             <MesVentes isMobile={isMobile} vendeuseNom={user?.nom || ''} enAttente={enAttente} rafraichir={versionHisto} entete={entete} onRecu={setRecuHisto} />

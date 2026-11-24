@@ -252,6 +252,30 @@ try {
   verifier('proprietaire B ne lit pas les prix d\'achat de A', lignes(await propB.client.from('produits_couts').select('*')).length === 0);
   verifier('proprietaire B n\'ecrit pas un prix d\'achat chez A', bloque(await propB.client.from('produits_couts').upsert({ produit_id: prodA, prix_achat: 1 }).select()));
 
+  // Phase 3 : pilotage (tableau de bord, periodes, objectifs).
+  const tbA = await gerantA.client.rpc('tableau_de_bord_admin');
+  verifier('gerant A lit son tableau de bord (benefice compris)', !tbA.error && tbA.data?.marge !== undefined && tbA.data?.periode?.id, tbA.error?.message);
+  verifier('vendeuse A ne lit pas le tableau de bord', !!(await vendA.client.rpc('tableau_de_bord_admin')).error);
+  const tbB = await propB.client.rpc('tableau_de_bord_admin');
+  verifier('tableau de bord de B : aucune vente de A', !tbB.error && !(tbB.data?.ventes_recentes || []).some((v) => v.id === rA.data), tbB.error?.message);
+  verifier('vendeuse A ne lit pas les periodes', lignes(await vendA.client.from('periodes').select('id')).length === 0);
+  verifier('proprietaire B ne lit pas les periodes de A', lignes(await propB.client.from('periodes').select('id').eq('organisation_id', orgA)).length === 0);
+  verifier('vendeuse A ne cloture pas la periode', !!(await vendA.client.rpc('cloturer_periode', { p_nom: 'x' })).error);
+  verifier('gerant A ne cree pas de periode directement', bloque(await gerantA.client.from('periodes').insert({ organisation_id: orgA }).select()));
+  const perA = lignes(await gerantA.client.from('periodes').select('id').is('fin', null))[0];
+  verifier('proprietaire B ne renomme pas une periode de A', !!(await propB.client.rpc('renommer_periode', { p_id: perA?.id, p_nom: 'pirate' })).error);
+  verifier('vendeuse A ne lit pas le calendrier', !!(await vendA.client.rpc('calendrier_ventes', { p_vue: 'mois' })).error);
+  const moisCourant = new Date().toISOString().slice(0, 8) + '01';
+  verifier('vendeuse A ne fixe pas d\'objectif', !!(await vendA.client.rpc('definir_objectif', { p_vendeuse_id: vendA.id, p_mois: moisCourant, p_objectif: 1 })).error);
+  verifier('proprietaire B ne fixe pas d\'objectif a une vendeuse de A', !!(await propB.client.rpc('definir_objectif', { p_vendeuse_id: vendA.id, p_mois: moisCourant, p_objectif: 1 })).error);
+  verifier('gerant A fixe un objectif a la vendeuse A', !(await gerantA.client.rpc('definir_objectif', { p_vendeuse_id: vendA.id, p_mois: moisCourant, p_objectif: 50000 })).error);
+  verifier('gerant A n\'ecrit pas un objectif directement', bloque(await gerantA.client.from('objectifs_vendeuses').insert({ organisation_id: orgA, vendeuse_id: vendA.id, mois: moisCourant, objectif: 1 }).select()));
+  const monObj = await vendA.client.rpc('mon_objectif');
+  verifier('vendeuse A voit son objectif', Number(monObj.data?.objectif) === 50000, JSON.stringify(monObj.data || monObj.error?.message));
+  verifier('vendeuse A3 ne voit pas l\'objectif de A', lignes(await vendA3.client.from('objectifs_vendeuses').select('id')).length === 0);
+  verifier('proprietaire B ne lit pas les objectifs de A', lignes(await propB.client.from('objectifs_vendeuses').select('id')).length === 0);
+  verifier('vendeuse A ne lit pas les objectifs de l\'equipe', !!(await vendA.client.rpc('objectifs_du_mois')).error);
+
   // Telephone caisse : connexion par code, sans mot de passe.
   const jeton = 'c'.repeat(64);
   verifier('gerant A active un poste caisse', !(await gerantA.client.rpc('creer_poste_caisse', { p_nom: 'Test', p_jeton_hash: jeton })).error);
