@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useUtilisateur } from '@/lib/utilisateur';
 import MaBoutique from './MaBoutique';
+import Securite, { ChampPin } from './Securite';
 
 // Plus de mot_de_passe : les mots de passe vivent dans auth.users, haches
 // par Supabase. L'app ne peut plus les lire, et c'est le but.
@@ -24,6 +25,10 @@ export default function AdminParametres() {
   const [sauvegarde, setSauvegarde] = useState(false);
   const [message, setMessage] = useState('');
   const [erreur, setErreur] = useState('');
+  const [avecPin, setAvecPin] = useState<number[]>([]);
+  const [pinPour, setPinPour] = useState<Vendeuse | null>(null);
+  const [nouveauPin, setNouveauPin] = useState('');
+  const [erreurPin, setErreurPin] = useState('');
 
   useEffect(() => { chargerVendeuses(); }, []);
 
@@ -34,6 +39,8 @@ export default function AdminParametres() {
       .eq('role', 'vendeuse')
       .order('nom');
     setVendeuses(data || []);
+    const { data: etat } = await supabase.rpc('etat_pins');
+    setAvecPin((etat?.utilisateurs as number[]) || []);
     setChargement(false);
   };
 
@@ -93,6 +100,17 @@ export default function AdminParametres() {
     await chargerVendeuses();
   };
 
+  // Code PIN de la vendeuse : sert a se connecter sur le telephone caisse.
+  const enregistrerPinVendeuse = async () => {
+    if (!pinPour) return;
+    if (nouveauPin.length < 4) { setErreurPin('Le code doit avoir 4 à 6 chiffres.'); return; }
+    const { error } = await supabase.rpc('definir_pin_vendeuse', { p_utilisateur_id: pinPour.id, p_pin: nouveauPin });
+    if (error) { setErreurPin(error.message); return; }
+    afficherMessage(`Code de ${pinPour.nom} enregistré. Donnez-le-lui en main propre.`);
+    setPinPour(null); setNouveauPin(''); setErreurPin('');
+    await chargerVendeuses();
+  };
+
   const actives = vendeuses.filter(v => v.actif);
   const inactives = vendeuses.filter(v => !v.actif);
 
@@ -105,6 +123,9 @@ export default function AdminParametres() {
   return (
     <div className="fade-up">
       <MaBoutique estProprietaire={acces?.role === 'proprietaire'} />
+
+      <div style={{ fontSize: '16px', fontWeight: 800, color: INK, margin: '6px 0 14px' }}>Sécurité</div>
+      <Securite />
 
       <div style={{ fontSize: '16px', fontWeight: 800, color: INK, margin: '6px 0 14px' }}>Comptes vendeuses</div>
       {/* Résumé */}
@@ -175,6 +196,21 @@ export default function AdminParametres() {
         </div>
       )}
 
+      {pinPour && (
+        <div onClick={() => setPinPour(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(16,24,40,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', zIndex: 100 }}>
+          <div role="dialog" aria-modal="true" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '400px', padding: '22px', boxShadow: '0 24px 60px rgba(16,24,40,.28)' }}>
+            <div style={{ fontSize: '17px', fontWeight: 800, color: INK, marginBottom: '6px' }}>Code PIN — {pinPour.nom}</div>
+            <div style={{ fontSize: '13px', color: SOFT, lineHeight: 1.5, marginBottom: '14px' }}>Elle tapera ce code sur le téléphone caisse pour se connecter. 4 à 6 chiffres, pas de suite (1234) ni de répétition (1111).</div>
+            <ChampPin valeur={nouveauPin} onChange={setNouveauPin} />
+            {erreurPin && <div style={{ color: '#D24444', fontSize: '13px', marginTop: '10px' }}>{erreurPin}</div>}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              <button onClick={enregistrerPinVendeuse} style={{ flex: 1, height: '44px', border: 'none', borderRadius: '12px', cursor: 'pointer', background: GRAD, color: '#fff', fontWeight: 700, fontSize: '14px' }}>Enregistrer</button>
+              <button onClick={() => setPinPour(null)} style={{ height: '44px', padding: '0 18px', border: '1px solid #E4E9F2', borderRadius: '12px', cursor: 'pointer', background: '#fff', color: '#5A6472', fontSize: '14px', fontWeight: 600 }}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {chargement ? (
         <div style={{ textAlign: 'center', padding: '60px', color: MUTE }}>Chargement…</div>
       ) : vendeuses.length === 0 ? (
@@ -199,7 +235,10 @@ export default function AdminParametres() {
                       <div style={{ fontSize: '13px', color: MUTE, marginTop: '2px' }}>{v.email}</div>
                     </div>
                     <div style={{ padding: '4px 12px', borderRadius: '20px', background: 'rgba(31,157,107,.12)', fontSize: '12px', fontWeight: 700, color: '#1F9D6B' }}>Active</div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button onClick={() => { setPinPour(v); setNouveauPin(''); setErreurPin(''); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 14px', borderRadius: '11px', cursor: 'pointer', background: avecPin.includes(v.id) ? '#F6F8FC' : 'rgba(200,137,31,.14)', border: 'none', color: avecPin.includes(v.id) ? '#5A6472' : '#C8891F', fontSize: '13px', fontWeight: 600 }}>
+                        <span className="ms" style={{ fontSize: '17px' }}>pin</span>{avecPin.includes(v.id) ? 'Changer le code' : 'Donner un code'}
+                      </button>
                       <button onClick={() => ouvrirEdit(v)} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px', padding: '0 14px', borderRadius: '11px', cursor: 'pointer', background: '#EEF3FC', border: 'none', color: BLUE, fontSize: '13px', fontWeight: 600 }}>
                         <span className="ms" style={{ fontSize: '17px' }}>edit</span>Modifier
                       </button>

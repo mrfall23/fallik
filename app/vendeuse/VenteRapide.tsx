@@ -2,6 +2,7 @@
 import { useRef, useState } from 'react';
 import Recu, { type RecuData } from '../components/Recu';
 import { partagerImageRecu, whatsappTexte } from '../components/recuPartage';
+import { useValidationGerant, validationRequise, signalerAuPatron } from '../components/ValidationGerant';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const INK = '#1A2438', BLUE = '#2563EB', GRAD = 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
@@ -22,6 +23,7 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
   const [erreur, setErreur] = useState('');
   const [recu, setRecu] = useState<RecuData | null>(null);
   const recuRef = useRef<HTMLDivElement>(null);
+  const { demander, element: fenetreGerant } = useValidationGerant();
 
   const ajouterAuPanier = (produit: any) => {
     const reel = produits.find(p => p.id === produit.id);
@@ -51,16 +53,26 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
     if (statutPaiement === 'partiel' && (!montantPaye || montantPayeNum <= 0)) { setErreur('Entrez le montant payé.'); return; }
     setErreur(''); setEnregistrement(true);
     try {
-      const reponse = await fetch('/api/ventes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente_nom: cliente.nom, cliente_telephone: cliente.telephone || null,
-          produits: panier.map(p => ({ produit_id: p.id, quantite: p.quantite })),
-          statut_paiement: statutPaiement, montant_paye: statutPaiement === 'paye' ? null : montantPayeNum,
-          mode_paiement: modePaiement,
-        }),
-      });
-      const resultat = await reponse.json().catch(() => ({}));
+      const envoyer = async (autorisation: string | null) => {
+        const r = await fetch('/api/ventes', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cliente_nom: cliente.nom, cliente_telephone: cliente.telephone || null,
+            produits: panier.map(p => ({ produit_id: p.id, quantite: p.quantite })),
+            statut_paiement: statutPaiement, montant_paye: statutPaiement === 'paye' ? null : montantPayeNum,
+            mode_paiement: modePaiement, autorisation,
+          }),
+        });
+        return { reponse: r, resultat: await r.json().catch(() => ({})) };
+      };
+      let { reponse, resultat } = await envoyer(null);
+      // Credit : la base exige le code du gerant.
+      if (!reponse.ok && validationRequise(resultat.message)) {
+        const jeton = await demander('credit', null, resteAPayer, `Crédit pour ${cliente.nom.trim()} (reste à payer)`);
+        if (!jeton) return;
+        ({ reponse, resultat } = await envoyer(jeton));
+        if (reponse.ok) signalerAuPatron();
+      }
       if (!reponse.ok) { setErreur(resultat.message || 'Erreur lors de l\'enregistrement.'); return; }
 
       const numero = `${new Date().getFullYear()}-${String(resultat?.id ?? '').padStart(4, '0')}`;
@@ -170,6 +182,7 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
         </button>
       </div>
 
+      {fenetreGerant}
       {recu && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(16,24,40,.5)', display: 'flex', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div style={{ width: '100%', maxWidth: '400px', margin: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>

@@ -1,11 +1,16 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useUtilisateur, seDeconnecter } from '@/lib/utilisateur';
+import { useUtilisateur, seDeconnecter, estModeCaisse } from '@/lib/utilisateur';
 import { useIsMobile } from '../components/useMediaQuery';
 import { FallikLogo } from '../components/Logo';
 import VenteRapide from './VenteRapide';
 import FactureDetail from './FactureDetail';
+import ClotureCaisse from './ClotureCaisse';
+
+// Telephone caisse partage : sans activite, on revient a l'ecran « Qui vend ? »
+// pour qu'une collegue ne vende pas sous le nom d'une autre.
+const VERROU_CAISSE_MS = 5 * 60 * 1000;
 
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const INK = '#1A2438', BLUE = '#2563EB', GRAD = 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
@@ -22,6 +27,16 @@ export default function VendeusePage() {
   const [saisieNom, setSaisieNom] = useState(false);
   const [nomClient, setNomClient] = useState('');
   const [erreur, setErreur] = useState('');
+  const [cloture, setCloture] = useState(false);
+
+  useEffect(() => {
+    if (!estModeCaisse()) return;
+    let minuteur = setTimeout(seDeconnecter, VERROU_CAISSE_MS);
+    const relancer = () => { clearTimeout(minuteur); minuteur = setTimeout(seDeconnecter, VERROU_CAISSE_MS); };
+    const evts = ['pointerdown', 'keydown', 'scroll'];
+    evts.forEach(e => window.addEventListener(e, relancer, { passive: true }));
+    return () => { clearTimeout(minuteur); evts.forEach(e => window.removeEventListener(e, relancer)); };
+  }, []);
 
   const chargerProduits = async () => {
     const { data } = await supabase.from('produits').select('*').order('nom');
@@ -30,7 +45,7 @@ export default function VendeusePage() {
   const chargerFactures = async () => {
     const { data } = await supabase
       .from('factures')
-      .select('id, nom_client, total, created_at, facture_lignes(quantite)')
+      .select('id, nom_client, total, created_at, vendeuse_id, utilisateurs(nom), facture_lignes(quantite)')
       .eq('statut', 'ouverte')
       .order('created_at', { ascending: false });
     setFactures(data || []);
@@ -60,6 +75,10 @@ export default function VendeusePage() {
     await Promise.all([chargerProduits(), chargerFactures()]);
   };
 
+  // Une vendeuse ne voit (et ne touche) que SES factures ; le gerant voit tout.
+  const gestion = user?.role === 'admin' || user?.role === 'proprietaire';
+  const visibles = factures.filter(f => gestion || f.vendeuse_id === user?.id);
+
   const nbArticles = (f: any) => (f.facture_lignes || []).reduce((s: number, l: any) => s + (l.quantite || 0), 0);
 
   return (
@@ -80,11 +99,16 @@ export default function VendeusePage() {
               <span style={{ fontSize: '13.5px', fontWeight: 600, color: INK }}>{user.nom}</span>
             </div>
           )}
+          <button onClick={() => setCloture(true)} aria-label="Clôturer ma caisse" title="Clôturer ma caisse" style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: '10px', padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: INK, fontSize: '13px', fontWeight: 600 }}>
+            <span className="ms" style={{ fontSize: '18px', color: BLUE }}>point_of_sale</span>{!isMobile && 'Clôturer ma caisse'}
+          </button>
           <button onClick={seDeconnecter} aria-label="Se déconnecter" style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: '10px', padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: SOFT }}>
             <span className="ms" style={{ fontSize: '18px' }}>logout</span>
           </button>
         </div>
       </header>
+
+      {cloture && <ClotureCaisse onFermer={() => setCloture(false)} />}
 
       {chargement ? (
         <div style={{ textAlign: 'center', padding: '80px', color: MUTE }}>Chargement…</div>
@@ -123,20 +147,20 @@ export default function VendeusePage() {
               {erreur && <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(210,68,68,.10)', border: '1px solid rgba(210,68,68,.25)', color: '#D24444', fontSize: '13px', marginBottom: '14px', maxWidth: '460px' }}>{erreur}</div>}
 
               {/* Cartes des factures ouvertes */}
-              {factures.length === 0 ? (
+              {visibles.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px', color: MUTE }}>
                   <span className="ms" style={{ fontSize: '48px', display: 'block', marginBottom: '12px', color: '#C6D2E8' }}>receipt_long</span>
                   Aucune facture ouverte. Cliquez sur « Nouvelle facture ».
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: '14px' }}>
-                  {factures.map(f => (
+                  {visibles.map(f => (
                     <button key={f.id} onClick={() => setFactureActive(f.id)} style={{ textAlign: 'left', padding: '18px', borderRadius: '18px', background: '#fff', border: `1px solid ${LINE}`, cursor: 'pointer', boxShadow: '0 6px 20px rgba(26,36,56,.05)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px' }}>
                         <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#1F9D6B', flexShrink: 0 }} />
                         <span style={{ fontSize: '16px', fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nom_client}</span>
                       </div>
-                      <div style={{ fontSize: '12.5px', color: MUTE, marginBottom: '12px' }}>{nbArticles(f)} article{nbArticles(f) > 1 ? 's' : ''}</div>
+                      <div style={{ fontSize: '12.5px', color: MUTE, marginBottom: '12px' }}>{nbArticles(f)} article{nbArticles(f) > 1 ? 's' : ''}{gestion && f.vendeuse_id !== user?.id && f.utilisateurs?.nom ? ` · ${f.utilisateurs.nom}` : ''}</div>
                       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
                         <span><span style={{ fontSize: '22px', fontWeight: 800, color: INK }}>{fmt(f.total)}</span><span style={{ fontSize: '11px', color: BLUE, fontWeight: 700, marginLeft: '3px' }}>FCFA</span></span>
                         <span style={{ fontSize: '12.5px', fontWeight: 700, color: BLUE, display: 'flex', alignItems: 'center', gap: '2px' }}>Ouvrir<span className="ms" style={{ fontSize: '17px' }}>chevron_right</span></span>

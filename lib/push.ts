@@ -29,46 +29,48 @@ function clientAdmin() {
 
 type InfosVente = { organisationId: number; vendeuse: string; cliente: string; total: number; statut: string };
 
+type Message = { title: string; body: string; tag: string; url: string };
+
 /**
- * Notifie les appareils admin abonnes DE LA MEME BOUTIQUE que la vente.
- * Multi-tenant : on filtre strictement par organisation_id, donc un admin
- * ne recoit jamais les ventes d'une autre boutique. Best-effort.
+ * Envoie un message aux appareils abonnes DE CETTE BOUTIQUE uniquement
+ * (filtre strict par organisation_id). Best-effort.
  */
-export async function notifierVente(v: InfosVente) {
+export async function notifierOrganisation(organisationId: number, messages: Message[]) {
   if (!process.env.VAPID_PRIVATE_KEY) return; // pas de cle privee -> notifications desactivees
-  if (!v.organisationId) return; // pas d'organisation -> on ne notifie personne (securite)
+  if (!organisationId || messages.length === 0) return; // pas d'organisation -> personne (securite)
   configurer();
 
   const admin = clientAdmin();
   const { data: abos } = await admin
     .from('push_subscriptions')
     .select('id, endpoint, p256dh, auth')
-    .eq('organisation_id', v.organisationId);
-
+    .eq('organisation_id', organisationId);
   if (!abos || abos.length === 0) return;
 
+  const morts = new Set<number>();
+  for (const m of messages) {
+    const payload = JSON.stringify(m);
+    await Promise.all(
+      abos.filter((a: any) => !morts.has(a.id)).map(async (a: any) => {
+        try {
+          await webpush.sendNotification({ endpoint: a.endpoint, keys: { p256dh: a.p256dh, auth: a.auth } }, payload);
+        } catch (e: any) {
+          // 404 / 410 : l'abonnement n'existe plus cote navigateur -> on le retire.
+          if (e?.statusCode === 404 || e?.statusCode === 410) morts.add(a.id);
+        }
+      }),
+    );
+  }
+  if (morts.size) await admin.from('push_subscriptions').delete().in('id', [...morts]);
+}
+
+/** Notifie la boutique d'une nouvelle vente. */
+export async function notifierVente(v: InfosVente) {
   const statutTxt = v.statut === 'paye' ? 'payé' : 'partiel';
-  const payload = JSON.stringify({
+  await notifierOrganisation(v.organisationId, [{
     title: '🛍️ Nouvelle vente',
     body: `${v.vendeuse} : ${v.total.toLocaleString('fr-FR')} FCFA — ${v.cliente} (${statutTxt})`,
     tag: 'vente',
     url: '/admin',
-  });
-
-  const morts: number[] = [];
-  await Promise.all(
-    abos.map(async (a: any) => {
-      try {
-        await webpush.sendNotification(
-          { endpoint: a.endpoint, keys: { p256dh: a.p256dh, auth: a.auth } },
-          payload,
-        );
-      } catch (e: any) {
-        // 404 / 410 : l'abonnement n'existe plus cote navigateur → on le retire.
-        if (e?.statusCode === 404 || e?.statusCode === 410) morts.push(a.id);
-      }
-    }),
-  );
-
-  if (morts.length) await admin.from('push_subscriptions').delete().in('id', morts);
+  }]);
 }

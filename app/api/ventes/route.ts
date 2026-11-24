@@ -27,7 +27,9 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ message: 'Non authentifie.' }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
-  const { cliente_nom, cliente_telephone, produits, statut_paiement, montant_paye, mode_paiement } = body;
+  const { cliente_nom, cliente_telephone, produits, statut_paiement, montant_paye, mode_paiement, autorisation } = body;
+  // Jeton de validation du gerant (credit) : verifie et consomme par la base.
+  const jeton = typeof autorisation === 'string' && /^[0-9a-f-]{36}$/i.test(autorisation) ? autorisation : null;
 
   const { data: venteId, error } = await supabase.rpc('enregistrer_vente', {
     p_cliente_nom: cliente_nom,
@@ -36,6 +38,7 @@ export async function POST(request: Request) {
     p_statut_paiement: statut_paiement,
     p_montant_paye: montant_paye ?? null,
     p_mode_paiement: mode_paiement,
+    p_autorisation: jeton,
   });
 
   if (error) {

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useUtilisateur, seDeconnecter } from '@/lib/utilisateur';
 import { useIsMobile } from '../components/useMediaQuery';
@@ -13,6 +13,9 @@ const NAV = [
   { href: '/admin/ventes', icon: 'receipt_long', label: 'Factures' },
   { href: '/admin/clients', icon: 'groups', label: 'Clients' },
   { href: '/admin/vendeuses', icon: 'badge', label: 'Vendeuses' },
+  { href: '/admin/inventaire', icon: 'fact_check', label: 'Inventaire' },
+  { href: '/admin/caisses', icon: 'point_of_sale', label: 'Clôtures de caisse' },
+  { href: '/admin/journal', icon: 'shield', label: 'Journal' },
   { href: '/admin/rapports', icon: 'bar_chart', label: 'Rapports' },
   { href: '/admin/parametres', icon: 'settings', label: 'Paramètres' },
 ];
@@ -24,7 +27,10 @@ const TITRES: Record<string, [string, string]> = {
   '/admin/vendeuses': ['Vendeuses', 'Performance et classement'],
   '/admin/clients': ['Clients', 'Profils et historique des achats'],
   '/admin/rapports': ['Rapports', 'Exports Excel de votre activité'],
-  '/admin/parametres': ['Paramètres', 'Boutique, abonnement et comptes'],
+  '/admin/parametres': ['Paramètres', 'Boutique, sécurité, abonnement et comptes'],
+  '/admin/inventaire': ['Inventaire', 'Comptage physique et écarts de stock'],
+  '/admin/caisses': ['Clôtures de caisse', 'Espèces déclarées et écarts'],
+  '/admin/journal': ['Journal', 'Actions sensibles, impossibles à effacer'],
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -33,6 +39,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const isMobile = useIsMobile();
   const [menuOuvert, setMenuOuvert] = useState(false);
+
+  // Envoie au patron les alertes du journal pas encore signalees.
+  useEffect(() => { if (user) fetch('/api/journal/notifier', { method: 'POST' }).catch(() => {}); }, [user, pathname]);
 
   if (!user) return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />;
 

@@ -59,6 +59,10 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith('/admin') && !gestion) return rediriger('/');
   if ((pathname.startsWith('/vendeuse') || pathname.startsWith('/abonnement')) && !user) return rediriger('/');
   if (pathname === '/' && user) return rediriger(gestion ? '/admin' : '/vendeuse');
+  // Telephone caisse : l'accueil est l'ecran « Qui vend ? » (sauf ?compte=1,
+  // pour que le gerant puisse quand meme se connecter avec son email).
+  if (pathname === '/' && !user && request.cookies.get('fallik_caisse')
+      && !request.nextUrl.searchParams.has('compte')) return rediriger('/caisse');
 
   return response;
 }

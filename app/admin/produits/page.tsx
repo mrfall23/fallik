@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useBoutique, SEUIL_STOCK_BAS_DEFAUT } from '@/lib/boutique';
+import { signalerAuPatron } from '../../components/ValidationGerant';
 
 type Produit = { id: number; nom: string; prix: number; description: string; stock_restant: number; stock_initial: number; image: string | null };
 const FORM_VIDE: Omit<Produit, 'id'> = { nom: '', prix: 0, description: '', stock_restant: 0, stock_initial: 0, image: null };
@@ -47,6 +48,7 @@ export default function AdminProduits() {
     } else {
       await supabase.from('produits').insert({ nom: form.nom.trim(), prix: form.prix, description: form.description, stock_restant: form.stock_restant, stock_initial: form.stock_restant, image: form.image });
     }
+    signalerAuPatron(); // changement de stock / prix : trace au journal
     await chargerProduits();
     setSauvegarde(false);
     fermerModal();
@@ -55,6 +57,7 @@ export default function AdminProduits() {
   const supprimer = async (id: number) => {
     if (!confirm('Supprimer ce produit ?')) return;
     await supabase.from('produits').delete().eq('id', id);
+    signalerAuPatron();
     await chargerProduits();
   };
 

@@ -86,8 +86,13 @@ export function useUtilisateur(roleRequis?: 'admin' | 'vendeuse') {
   return { utilisateur, acces, chargement };
 }
 
-/** Termine la session Supabase et renvoie au login. */
+/** Ce navigateur est-il un telephone « caisse » partage ? (affichage seulement) */
+export const estModeCaisse = () => typeof document !== 'undefined' && /(?:^|;\s*)fallik_caisse=1/.test(document.cookie);
+
+/** Termine la session Supabase et renvoie au login (ou a l'ecran caisse). */
 export async function seDeconnecter() {
-  await supabase.auth.signOut();
-  window.location.href = '/';
+  const caisse = estModeCaisse();
+  // Sur la caisse partagee, on ne ferme que la session de cet appareil.
+  await supabase.auth.signOut(caisse ? { scope: 'local' } : undefined);
+  window.location.href = caisse ? '/caisse' : '/';
 }

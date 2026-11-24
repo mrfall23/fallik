@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Recu, { type RecuData } from '../components/Recu';
 import { partagerImageRecu, whatsappTexte } from '../components/recuPartage';
+import { useValidationGerant, validationRequise, signalerAuPatron, type ActionSensible } from '../components/ValidationGerant';
 
 const MODES: [string, string][] = [['cash', 'Espèces'], ['mobile_money', 'Mobile Money'], ['orange_money', 'Orange Money'], ['carte', 'Carte'], ['autre', 'Autre']];
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
@@ -36,20 +37,47 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
   lignes.forEach(l => { qteMap[l.produit_id] = l.quantite; });
   const total = Number(facture?.total ?? 0);
 
+  // Actions sensibles : on tente ; si la base exige le gerant, on lui demande
+  // son code puis on rejoue avec le jeton a usage unique.
+  const { demander, element: fenetreGerant } = useValidationGerant();
+  const avecGerant = async (
+    appel: (jeton: string | null) => PromiseLike<{ data?: any; error: any }>,
+    action: ActionSensible, montantAction: number, libelle: string,
+  ) => {
+    let r = await appel(null);
+    if (r.error && validationRequise(r.error.message)) {
+      const jeton = await demander(action, factureId, montantAction, libelle);
+      if (!jeton) return { data: null, error: { message: '' } };
+      r = await appel(jeton);
+      if (!r.error) signalerAuPatron();
+    }
+    return r;
+  };
+
   const definir = async (produitId: number, quantite: number) => {
     if (busy) return;
     setBusy(true); setErreur('');
-    const { error } = await supabase.rpc('facture_definir_quantite', { p_facture_id: factureId, p_produit_id: produitId, p_quantite: Math.max(0, quantite) });
-    if (error) setErreur(error.message || 'Erreur.');
+    const cible = Math.max(0, quantite);
+    const ligne = lignes.find(l => l.produit_id === produitId);
+    const retire = Math.max(0, (ligne?.quantite || 0) - cible);
+    const { error } = await avecGerant(
+      (jeton) => supabase.rpc('facture_definir_quantite', { p_facture_id: factureId, p_produit_id: produitId, p_quantite: cible, p_autorisation: jeton }),
+      'retirer_article', retire * Number(ligne?.prix_unitaire || 0),
+      `Retirer ${retire} × ${ligne?.produits?.nom || 'article'} de « ${facture?.nom_client} »`,
+    );
+    if (error?.message) setErreur(error.message);
     await Promise.all([rechargerProduits(), charger()]);
     setBusy(false);
   };
 
   const annuler = async () => {
     if (!confirm('Annuler cette facture ? Le stock sera restitué.')) return;
-    setBusy(true);
-    const { error } = await supabase.rpc('facture_annuler', { p_facture_id: factureId });
-    if (error) { setErreur(error.message || 'Erreur.'); setBusy(false); return; }
+    setBusy(true); setErreur('');
+    const { error } = await avecGerant(
+      (jeton) => supabase.rpc('facture_annuler', { p_facture_id: factureId, p_autorisation: jeton }),
+      'annuler_facture', total, `Annuler la facture « ${facture?.nom_client} »`,
+    );
+    if (error) { setErreur(error.message); setBusy(false); return; }
     await rechargerProduits();
     onRetour();
   };
@@ -57,8 +85,11 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
   const confirmerEncaissement = async () => {
     const paye = montant === '' ? total : Number(montant);
     setBusy(true); setErreur('');
-    const { data: venteId, error } = await supabase.rpc('facture_finaliser', { p_facture_id: factureId, p_mode_paiement: mode, p_montant_paye: paye });
-    if (error) { setErreur(error.message || 'Erreur.'); setBusy(false); return; }
+    const { data: venteId, error } = await avecGerant(
+      (jeton) => supabase.rpc('facture_finaliser', { p_facture_id: factureId, p_mode_paiement: mode, p_montant_paye: paye, p_autorisation: jeton }),
+      'credit', Math.max(0, total - paye), `Crédit pour « ${facture?.nom_client} » (reste à payer)`,
+    );
+    if (error) { setErreur(error.message); setBusy(false); return; }
     setRecu({
       boutique: boutiqueNom,
       numero: `${new Date().getFullYear()}-${String(venteId).padStart(4, '0')}`,
@@ -68,6 +99,7 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
       total, paye, reste: Math.max(0, total - paye), mode, statut: paye >= total ? 'paye' : 'partiel',
     });
     setEncaisse(false);
+    setBusy(false);
     await rechargerProduits();
   };
 
@@ -157,6 +189,7 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
             </div>
 
             <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '.4px', color: SOFT, textTransform: 'uppercase', marginBottom: '8px' }}>Montant reçu (laisser vide = payé en entier)</div>
+            {montant !== '' && Number(montant) < total && <div style={{ fontSize: '12px', color: '#C8891F', fontWeight: 600, marginTop: '-4px', marginBottom: '8px' }}>Crédit de {fmt(total - Number(montant))} FCFA : le code du gérant sera demandé.</div>}
             <input type="number" value={montant} onChange={e => setMontant(e.target.value === '' ? '' : Number(e.target.value))} placeholder={fmt(total)} style={{ height: '46px', padding: '0 14px', borderRadius: '12px', background: '#F6F8FC', border: '1px solid #E4E9F2', outline: 'none', color: INK, fontSize: '15px', width: '100%', marginBottom: '14px' }} />
 
             <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '.4px', color: SOFT, textTransform: 'uppercase', marginBottom: '8px' }}>Téléphone du client (pour le reçu WhatsApp)</div>
@@ -167,6 +200,8 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
           </div>
         </div>
       )}
+
+      {fenetreGerant}
 
       {/* Reçu après encaissement */}
       {recu && (

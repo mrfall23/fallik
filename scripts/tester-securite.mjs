@@ -113,7 +113,8 @@ try {
   // ═══════════════════════════════════════════════════════════════
   section('1. Visiteur anonyme (cle publique, sans session)');
   const anon = nouveauClient();
-  for (const t of ['organisations', 'abonnements', 'utilisateurs', 'produits', 'clientes', 'ventes', 'vente_produits', 'paiements', 'factures', 'facture_lignes', 'push_subscriptions', 'inscriptions_journal']) {
+  for (const t of ['organisations', 'abonnements', 'utilisateurs', 'produits', 'clientes', 'ventes', 'vente_produits', 'paiements', 'factures', 'facture_lignes', 'push_subscriptions', 'inscriptions_journal',
+    'codes_pin', 'autorisations', 'tentatives_pin', 'journal_activite', 'postes_caisse', 'clotures_caisse', 'inventaires', 'inventaire_lignes']) {
     const r = await anon.from(t).select('*').limit(5);
     verifier(`anonyme ne lit rien dans ${t}`, !!r.error || lignes(r).length === 0, `${lignes(r).length} ligne(s)`);
   }
@@ -196,6 +197,51 @@ try {
   verifier('vendeuse A ne se promeut pas', bloque(await vendA.client.from('utilisateurs').update({ role: 'admin' }).eq('id', vendA.id).select()));
   const ventesVend = await vendA.client.from('ventes').select('vendeuse_id');
   verifier('vendeuse A ne voit que ses propres ventes', lignes(ventesVend).every((v) => v.vendeuse_id === vendA.id));
+
+  // ═══════════════════════════════════════════════════════════════
+  section('4 bis. Vendeuses : code du gerant, journal, caisse');
+  const vendA3 = await creerCompte(orgA, 'vendeuse', 'Vendeuse A3');
+  verifier('gerant A definit son code', !(await gerantA.client.rpc('definir_mon_pin', { p_pin: '4826' })).error);
+  verifier('gerant A definit le code de la vendeuse A', !(await gerantA.client.rpc('definir_pin_vendeuse', { p_utilisateur_id: vendA.id, p_pin: '7391' })).error);
+  verifier("vendeuse A ne definit pas le code d'une collegue", !!(await vendA.client.rpc('definir_pin_vendeuse', { p_utilisateur_id: vendA3.id, p_pin: '7391' })).error);
+  verifier("proprietaire B ne definit pas le code d'une vendeuse de A", !!(await propB.client.rpc('definir_pin_vendeuse', { p_utilisateur_id: vendA.id, p_pin: '5555' })).error);
+  for (const t of ['codes_pin', 'autorisations', 'tentatives_pin']) {
+    verifier(`gerant A ne lit pas ${t}`, lignes(await gerantA.client.from(t).select('*')).length === 0);
+  }
+  const { data: fV } = await vendA.client.rpc('ouvrir_facture', { p_nom_client: 'Table V' });
+  await vendA.client.rpc('facture_definir_quantite', { p_facture_id: fV, p_produit_id: prodA, p_quantite: 2 });
+  verifier('vendeuse A3 ne touche pas la facture de A', !!(await vendA3.client.rpc('facture_definir_quantite', { p_facture_id: fV, p_produit_id: prodA, p_quantite: 5 })).error);
+  const annSans = await vendA.client.rpc('facture_annuler', { p_facture_id: fV });
+  verifier("vendeuse A n'annule pas sans le code du gerant", /Validation du gérant requise/.test(annSans.error?.message || ''), annSans.error?.message);
+  const credSans = await vendA.client.rpc('facture_finaliser', { p_facture_id: fV, p_mode_paiement: 'cash', p_montant_paye: 0 });
+  verifier('vendeuse A ne fait pas credit sans le code du gerant', !!credSans.error);
+  const faux = await vendA.client.rpc('demander_autorisation', { p_action: 'annuler_facture', p_cible: fV, p_montant: 2000, p_code: '0000' });
+  verifier('mauvais code gerant refuse', faux.data?.ok === false, JSON.stringify(faux.data || faux.error?.message));
+  const vrai = await vendA.client.rpc('demander_autorisation', { p_action: 'annuler_facture', p_cible: fV, p_montant: 2000, p_code: '4826' });
+  verifier('bon code gerant : jeton', vrai.data?.ok === true, JSON.stringify(vrai.data || vrai.error?.message));
+  verifier('vendeuse A3 ne reutilise pas le jeton de A', !!(await vendA3.client.rpc('facture_annuler', { p_facture_id: fV, p_autorisation: vrai.data?.autorisation })).error);
+  verifier('vendeuse A annule avec le jeton', !(await vendA.client.rpc('facture_annuler', { p_facture_id: fV, p_autorisation: vrai.data?.autorisation })).error);
+  const jA = await gerantA.client.from('journal_activite').select('action, approuve_nom').eq('action', 'facture_annulee');
+  verifier('annulation au journal avec le nom du gerant', lignes(jA).some((j) => j.approuve_nom === 'Gerant A'));
+  verifier('vendeuse A ne lit pas le journal', lignes(await vendA.client.from('journal_activite').select('id')).length === 0);
+  verifier('proprietaire B ne lit pas le journal de A', lignes(await propB.client.from('journal_activite').select('id')).length === 0);
+  verifier("gerant A n'efface pas le journal", bloque(await gerantA.client.from('journal_activite').delete().eq('organisation_id', orgA).select()));
+  verifier("cle secrete n'efface pas le journal", !!(await service.from('journal_activite').delete().eq('organisation_id', orgA)).error);
+  const clo = await vendA.client.rpc('cloturer_caisse', { p_especes: 0 });
+  verifier('vendeuse A cloture sa caisse (attendu calcule par la base)', !clo.error && Number(clo.data?.attendu_especes) === 1000, JSON.stringify(clo.data || clo.error?.message));
+  verifier("vendeuse A ne fait pas d'inventaire", !!(await vendA.client.rpc('enregistrer_inventaire', { p_lignes: [{ produit_id: prodA, compte: 0 }], p_appliquer: true })).error);
+  // Telephone caisse : connexion par code, sans mot de passe.
+  const jeton = 'c'.repeat(64);
+  verifier('gerant A active un poste caisse', !(await gerantA.client.rpc('creer_poste_caisse', { p_nom: 'Test', p_jeton_hash: jeton })).error);
+  verifier("un connecte n'appelle pas caisse_verifier_pin", !!(await vendA.client.rpc('caisse_verifier_pin', { p_jeton_hash: jeton, p_utilisateur_id: vendA.id, p_pin: '7391' })).error);
+  const cx = await service.rpc('caisse_verifier_pin', { p_jeton_hash: jeton, p_utilisateur_id: vendA.id, p_pin: '7391' });
+  verifier('caisse : bon code accepte', cx.data?.ok === true, JSON.stringify(cx.data || cx.error?.message));
+  const lien = await service.auth.admin.generateLink({ type: 'magiclink', email: cx.data?.email });
+  const poste = nouveauClient();
+  const ses = await poste.auth.verifyOtp({ type: 'magiclink', token_hash: lien.data?.properties?.hashed_token });
+  const qui = await poste.rpc('mon_acces');
+  verifier('caisse : session ouverte pour la vendeuse A (et pas le patron)', !ses.error && qui.data?.utilisateur_id === vendA.id && qui.data?.role === 'vendeuse', ses.error?.message || JSON.stringify(qui.data));
+  verifier("caisse : la vendeuse d'une autre boutique est refusee", (await service.rpc('caisse_verifier_pin', { p_jeton_hash: jeton, p_utilisateur_id: vendB.id, p_pin: '7391' })).data?.ok === false);
 
   // ═══════════════════════════════════════════════════════════════
   section('5. Boutique expiree (C)');
