@@ -224,7 +224,7 @@ try {
   const jA = await gerantA.client.from('journal_activite').select('action, approuve_nom').eq('action', 'facture_annulee');
   verifier('annulation au journal avec le nom du gerant', lignes(jA).some((j) => j.approuve_nom === 'Gerant A'));
   verifier('vendeuse A ne lit pas le journal', lignes(await vendA.client.from('journal_activite').select('id')).length === 0);
-  verifier('proprietaire B ne lit pas le journal de A', lignes(await propB.client.from('journal_activite').select('id')).length === 0);
+  verifier('proprietaire B ne lit pas le journal de A', lignes(await propB.client.from('journal_activite').select('id').eq('organisation_id', orgA)).length === 0);
   verifier("gerant A n'efface pas le journal", bloque(await gerantA.client.from('journal_activite').delete().eq('organisation_id', orgA).select()));
   verifier("cle secrete n'efface pas le journal", !!(await service.from('journal_activite').delete().eq('organisation_id', orgA)).error);
   const clo = await vendA.client.rpc('cloturer_caisse', { p_especes: 0 });
