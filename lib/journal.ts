@@ -21,6 +21,7 @@ export const ICONES_JOURNAL: Record<string, string> = {
   inventaire: 'fact_check', connexion_caisse: 'login', caisse_compte_bloque: 'lock',
   poste_caisse_active: 'smartphone', poste_caisse_retire: 'mobile_off', pin_modifie: 'pin', pin_vendeuse_modifie: 'pin',
   periode_cloturee: 'restart_alt', objectif_defini: 'flag',
+  alertes_modifiees: 'notifications', telegram_lie: 'send', telegram_delie: 'notifications_off',
 };
 
 export function decrireEvenement(j: LigneJournal): string {
@@ -52,6 +53,13 @@ export function decrireEvenement(j: LigneJournal): string {
     case 'poste_caisse_retire': return `${qui} a retiré le téléphone caisse « ${d.poste} »`;
     case 'periode_cloturee': return `${qui} a clôturé la période « ${d.periode} » : ${f(j.montant)} FCFA sur ${d.ventes} vente(s), compteurs remis à zéro`;
     case 'objectif_defini': return j.montant ? `${qui} a fixé l'objectif de ${d.vendeuse} pour ${d.mois} : ${f(j.montant)} FCFA` : `${qui} a retiré l'objectif de ${d.vendeuse} pour ${d.mois}`;
+    case 'alertes_modifiees': {
+      const off = ['ventes', 'stock_bas', 'actions_sensibles', 'resume_soir'].filter(k => d[k] === false)
+        .map(k => ({ ventes: 'ventes', stock_bas: 'stock bas', actions_sensibles: 'actions à vérifier', resume_soir: 'résumé du soir' } as Record<string, string>)[k]);
+      return `${qui} a modifié les alertes${off.length ? ` (coupées : ${off.join(', ')})` : ' (toutes actives)'}`;
+    }
+    case 'telegram_lie': return `Telegram relié à la boutique (${d.conversation})`;
+    case 'telegram_delie': return `${qui === 'Système' ? 'Telegram' : qui} : alertes Telegram délié${d.conversation ? ` (${d.conversation})` : ''}`;
     case 'pin_modifie': return `${qui} a changé son code PIN`;
     case 'pin_vendeuse_modifie': return `${qui} a défini le code PIN de ${d.vendeuse}`;
     default: return `${qui} : ${j.action}`;

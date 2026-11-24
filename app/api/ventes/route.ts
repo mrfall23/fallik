@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { creerClientServeur } from '@/lib/supabase-server';
-import { notifierVente } from '@/lib/push';
+import { envoyerAlertes } from '@/lib/alertes';
+import { origineSite } from '@/lib/telegram';
 
-// Enregistrement d'une vente, cote serveur, pour pouvoir notifier l'admin.
+// Enregistrement d'une vente rapide, cote serveur, pour envoyer les alertes
+// aussitot.
 //
 // La vente elle-meme passe TOUJOURS par la RPC enregistrer_vente() : meme
 // atomicite, meme verrouillage de stock, memes prix lus en base. On appelle
@@ -12,14 +13,6 @@ import { notifierVente } from '@/lib/push';
 //
 // La notification est un BONUS best-effort : si elle echoue, la vente reste
 // valide et la reponse reste un succes.
-
-function clientAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-    process.env.SUPABASE_SECRET_KEY as string,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-}
 
 export async function POST(request: Request) {
   const supabase = await creerClientServeur();
@@ -46,31 +39,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: error.message || "Erreur lors de l'enregistrement." }, { status: 400 });
   }
 
-  // ── Notification admin (best-effort, jamais bloquante) ──
-  try {
-    const admin = clientAdmin();
-    const { data: v } = await admin
-      .from('ventes')
-      .select('total, statut_paiement, cliente_id, vendeuse_id, organisation_id')
-      .eq('id', venteId)
-      .single();
-
-    if (v) {
-      const [{ data: cli }, { data: ven }] = await Promise.all([
-        v.cliente_id ? admin.from('clientes').select('nom').eq('id', v.cliente_id).single() : Promise.resolve({ data: null }),
-        v.vendeuse_id ? admin.from('utilisateurs').select('nom').eq('id', v.vendeuse_id).single() : Promise.resolve({ data: null }),
-      ]);
-      await notifierVente({
-        organisationId: Number(v.organisation_id),
-        vendeuse: (ven as any)?.nom || 'Une vendeuse',
-        cliente: (cli as any)?.nom || 'Cliente',
-        total: Number(v.total) || 0,
-        statut: v.statut_paiement,
-      });
-    }
-  } catch (e) {
-    console.error('Notification de vente echouee (sans impact sur la vente) :', e);
-  }
+  // ── Alertes (push + Telegram, best-effort, jamais bloquantes) ──
+  // La base a mis la vente (et un eventuel stock bas) en file : on envoie.
+  const { data: acces } = await supabase.rpc('mon_acces');
+  if (acces?.organisation_id) await envoyerAlertes(Number(acces.organisation_id), origineSite(request));
 
   return NextResponse.json({ ok: true, id: venteId });
 }

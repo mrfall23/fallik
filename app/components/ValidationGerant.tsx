@@ -12,7 +12,16 @@ export type ActionSensible = 'annuler_facture' | 'retirer_article' | 'credit' | 
 export const validationRequise = (message?: string | null) => !!message && message.includes('Validation du gérant requise');
 
 /** Previent le patron (notification) des actions sensibles deja journalisees. */
-export const signalerAuPatron = () => { fetch('/api/journal/notifier', { method: 'POST' }).catch(() => {}); };
+// Envoi des alertes en attente (push + Telegram). Regroupe les appels
+// rapproches (plusieurs articles ajoutes d'affilee) en un seul envoi.
+let minuteurSignal: ReturnType<typeof setTimeout> | null = null;
+export const signalerAuPatron = () => {
+  if (minuteurSignal) clearTimeout(minuteurSignal);
+  minuteurSignal = setTimeout(() => {
+    minuteurSignal = null;
+    fetch('/api/journal/notifier', { method: 'POST', keepalive: true }).catch(() => {});
+  }, 1200);
+};
 
 type Demande = { action: ActionSensible; cible: number | null; montant: number; libelle: string };
 

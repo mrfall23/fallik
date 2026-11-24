@@ -27,8 +27,6 @@ function clientAdmin() {
   );
 }
 
-type InfosVente = { organisationId: number; vendeuse: string; cliente: string; total: number; statut: string };
-
 type Message = { title: string; body: string; tag: string; url: string };
 
 /**
@@ -62,15 +60,4 @@ export async function notifierOrganisation(organisationId: number, messages: Mes
     );
   }
   if (morts.size) await admin.from('push_subscriptions').delete().in('id', [...morts]);
-}
-
-/** Notifie la boutique d'une nouvelle vente. */
-export async function notifierVente(v: InfosVente) {
-  const statutTxt = v.statut === 'paye' ? 'payé' : 'partiel';
-  await notifierOrganisation(v.organisationId, [{
-    title: '🛍️ Nouvelle vente',
-    body: `${v.vendeuse} : ${v.total.toLocaleString('fr-FR')} FCFA — ${v.cliente} (${statutTxt})`,
-    tag: 'vente',
-    url: '/admin',
-  }]);
 }

@@ -276,6 +276,21 @@ try {
   verifier('proprietaire B ne lit pas les objectifs de A', lignes(await propB.client.from('objectifs_vendeuses').select('id')).length === 0);
   verifier('vendeuse A ne lit pas les objectifs de l\'equipe', !!(await vendA.client.rpc('objectifs_du_mois')).error);
 
+  // Phase 5 : alertes (reglages du proprietaire, Telegram, file d'envoi).
+  verifier('gerant A lit les reglages d\'alertes', lignes(await gerantA.client.from('reglages_alertes').select('ventes')).length === 1);
+  verifier('gerant A ne lit pas le Telegram relie (chat id)', !!(await gerantA.client.from('reglages_alertes').select('telegram_chat_id')).error);
+  verifier('vendeuse A ne lit pas les reglages d\'alertes', lignes(await vendA.client.from('reglages_alertes').select('ventes')).length === 0);
+  verifier('proprietaire B ne lit pas les reglages de A', lignes(await propB.client.from('reglages_alertes').select('ventes').eq('organisation_id', orgA)).length === 0);
+  verifier('gerant A ne coupe pas les alertes', !!(await gerantA.client.rpc('definir_alertes', { p_ventes: null, p_stock_bas: null, p_actions_sensibles: false, p_resume_soir: null })).error);
+  verifier('gerant A ne relie pas de Telegram', !!(await gerantA.client.rpc('telegram_preparer_liaison', { p_code_hash: 'a'.repeat(64) })).error);
+  verifier('gerant A ne modifie pas les reglages directement', bloque(await gerantA.client.from('reglages_alertes').update({ actions_sensibles: false }).eq('organisation_id', orgA).select()));
+  verifier('proprietaire A regle ses alertes', !(await propA.client.rpc('definir_alertes', { p_ventes: true, p_stock_bas: true, p_actions_sensibles: true, p_resume_soir: true })).error);
+  verifier('un connecte ne relie pas une conversation (reserve au bot)', !!(await propA.client.rpc('telegram_lier', { p_code_hash: 'a'.repeat(64), p_chat_id: '1', p_titre: 'x' })).error);
+  verifier('un connecte ne vide pas la file d\'alertes', !!(await propA.client.rpc('alertes_a_envoyer', { p_org: orgA })).error);
+  verifier('un connecte ne lit pas le resume d\'une boutique', !!(await propB.client.rpc('resume_du_jour', { p_org: orgA })).error);
+  verifier('personne ne lit la file d\'alertes', lignes(await propA.client.from('alertes_file').select('id')).length === 0);
+  verifier('la vente de A est en file d\'alertes', lignes(await service.from('alertes_file').select('type').eq('organisation_id', orgA)).some((f) => f.type === 'vente'));
+
   // Telephone caisse : connexion par code, sans mot de passe.
   const jeton = 'c'.repeat(64);
   verifier('gerant A active un poste caisse', !(await gerantA.client.rpc('creer_poste_caisse', { p_nom: 'Test', p_jeton_hash: jeton })).error);

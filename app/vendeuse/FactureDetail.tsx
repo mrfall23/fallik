@@ -48,8 +48,9 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
       const jeton = await demander(action, factureId, montantAction, libelle);
       if (!jeton) return { data: null, error: { message: '' } };
       r = await appel(jeton);
-      if (!r.error) signalerAuPatron();
     }
+    // Vente encaissee, stock bas, action validee : la base a tout mis en file.
+    if (!r.error) signalerAuPatron();
     return r;
   };
 

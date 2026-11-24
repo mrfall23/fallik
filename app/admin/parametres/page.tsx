@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useUtilisateur } from '@/lib/utilisateur';
 import MaBoutique from './MaBoutique';
 import Securite, { ChampPin } from './Securite';
+import Alertes from './Alertes';
 
 // Plus de mot_de_passe : les mots de passe vivent dans auth.users, haches
 // par Supabase. L'app ne peut plus les lire, et c'est le but.
@@ -126,6 +127,9 @@ export default function AdminParametres() {
 
       <div style={{ fontSize: '16px', fontWeight: 800, color: INK, margin: '6px 0 14px' }}>Sécurité</div>
       <Securite />
+
+      <div style={{ fontSize: '16px', fontWeight: 800, color: INK, margin: '6px 0 14px' }}>Alertes</div>
+      <Alertes estProprietaire={acces?.role === 'proprietaire'} />
 
       <div style={{ fontSize: '16px', fontWeight: 800, color: INK, margin: '6px 0 14px' }}>Comptes vendeuses</div>
       {/* Résumé */}
