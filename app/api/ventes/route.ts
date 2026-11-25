@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { creerClientServeur } from '@/lib/supabase-server';
 import { envoyerAlertes } from '@/lib/alertes';
-import { origineSite } from '@/lib/telegram';
 
 // Enregistrement d'une vente rapide, cote serveur, pour envoyer les alertes
 // aussitot.
@@ -39,10 +38,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: error.message || "Erreur lors de l'enregistrement." }, { status: 400 });
   }
 
-  // ── Alertes (push + Telegram, best-effort, jamais bloquantes) ──
+  // ── Alertes (push, best-effort, jamais bloquantes) ──
   // La base a mis la vente (et un eventuel stock bas) en file : on envoie.
   const { data: acces } = await supabase.rpc('mon_acces');
-  if (acces?.organisation_id) await envoyerAlertes(Number(acces.organisation_id), origineSite(request));
+  if (acces?.organisation_id) await envoyerAlertes(Number(acces.organisation_id));
 
   return NextResponse.json({ ok: true, id: venteId });
 }

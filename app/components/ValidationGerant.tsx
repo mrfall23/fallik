@@ -12,7 +12,7 @@ export type ActionSensible = 'annuler_facture' | 'retirer_article' | 'credit' | 
 export const validationRequise = (message?: string | null) => !!message && message.includes('Validation du gérant requise');
 
 /** Previent le patron (notification) des actions sensibles deja journalisees. */
-// Envoi des alertes en attente (push + Telegram). Regroupe les appels
+// Envoi des alertes en attente (push). Regroupe les appels
 // rapproches (plusieurs articles ajoutes d'affilee) en un seul envoi.
 let minuteurSignal: ReturnType<typeof setTimeout> | null = null;
 export const signalerAuPatron = () => {
