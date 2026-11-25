@@ -44,6 +44,16 @@ export async function envoyerAlertes(org: number) {
     const file = (data || []) as { type: string; ref: number | string }[];
     const ventesIds = file.filter(f => f.type === 'vente').map(f => Number(f.ref));
     const stockIds = file.filter(f => f.type === 'stock_bas').map(f => Number(f.ref));
+    const commandesIds = file.filter(f => f.type === 'commande').map(f => Number(f.ref));
+
+    // Commandes du site web : toujours signalees (il faut les traiter).
+    if (commandesIds.length) {
+      const { data: cmds } = await service.from('commandes_en_ligne').select('id, reference, client_nom, total')
+        .in('id', commandesIds.slice(0, 20)).eq('organisation_id', org).eq('statut', 'nouvelle').order('id');
+      for (const c of cmds || []) {
+        push.push({ title: '🛒 Commande en ligne', body: `${c.client_nom} : ${montant(c.total, dev)} (${c.reference}) — à valider`, tag: `commande-${c.id}`, url: '/admin/commandes' });
+      }
+    }
 
     if (reglages.ventes && ventesIds.length) {
       const { data: ventes } = await service.from('ventes')

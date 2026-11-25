@@ -5,6 +5,7 @@ import { useUtilisateur } from '@/lib/utilisateur';
 import MaBoutique from './MaBoutique';
 import Securite, { ChampPin } from './Securite';
 import Alertes from './Alertes';
+import SiteWeb from './SiteWeb';
 
 // Plus de mot_de_passe : les mots de passe vivent dans auth.users, haches
 // par Supabase. L'app ne peut plus les lire, et c'est le but.
@@ -96,7 +97,8 @@ export default function AdminParametres() {
   };
 
   const toggleActif = async (v: Vendeuse) => {
-    await supabase.from('utilisateurs').update({ actif: !v.actif }).eq('id', v.id);
+    const { error } = await supabase.from('utilisateurs').update({ actif: !v.actif }).eq('id', v.id);
+    if (error) { alert(error.message.includes('Plan Solo') ? error.message : 'Modification impossible.'); return; }
     afficherMessage(v.actif ? `${v.nom} désactivée.` : `${v.nom} réactivée.`);
     await chargerVendeuses();
   };
@@ -130,6 +132,9 @@ export default function AdminParametres() {
 
       <div style={{ fontSize: '16px', fontWeight: 800, color: INK, margin: '6px 0 14px' }}>Alertes</div>
       <Alertes estProprietaire={acces?.role === 'proprietaire'} />
+
+      <div style={{ fontSize: '16px', fontWeight: 800, color: INK, margin: '6px 0 14px' }}>Site web</div>
+      <SiteWeb estProprietaire={acces?.role === 'proprietaire'} plan={acces?.plan || 'solo'} />
 
       <div style={{ fontSize: '16px', fontWeight: 800, color: INK, margin: '6px 0 14px' }}>Comptes vendeuses</div>
       {/* Résumé */}

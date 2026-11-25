@@ -6,11 +6,13 @@ import { useIsMobile } from '../components/useMediaQuery';
 import PushToggle from '../components/PushToggle';
 import { FallikLogo } from '../components/Logo';
 import { LIBELLES_ROLE } from '@/lib/roles';
+import { supabase } from '@/lib/supabase';
 
 const NAV = [
   { href: '/admin', icon: 'space_dashboard', label: 'Tableau de bord' },
   { href: '/admin/produits', icon: 'inventory_2', label: 'Stock' },
   { href: '/admin/ventes', icon: 'receipt_long', label: 'Factures' },
+  { href: '/admin/commandes', icon: 'shopping_cart', label: 'Commandes en ligne' },
   { href: '/admin/clients', icon: 'groups', label: 'Clients' },
   { href: '/admin/vendeuses', icon: 'badge', label: 'Vendeuses' },
   { href: '/admin/calendrier', icon: 'calendar_month', label: 'Calendrier' },
@@ -25,6 +27,7 @@ const TITRES: Record<string, [string, string]> = {
   '/admin': ['Tableau de bord', "Vue d'ensemble de l'activité"],
   '/admin/produits': ['Stock', 'Catalogue et niveaux de stock'],
   '/admin/ventes': ['Factures', 'Historique des ventes et factures'],
+  '/admin/commandes': ['Commandes en ligne', 'Commandes reçues de votre site web'],
   '/admin/vendeuses': ['Vendeuses', 'Objectifs, performance et classement'],
   '/admin/calendrier': ['Calendrier', 'Ventes par période, par mois et par semaine'],
   '/admin/clients': ['Clients', 'Profils et historique des achats'],
@@ -41,6 +44,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const isMobile = useIsMobile();
   const [menuOuvert, setMenuOuvert] = useState(false);
+  const [superAdmin, setSuperAdmin] = useState(false);
+  const [aTraiter, setATraiter] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    let annule = false;
+    supabase.rpc('suis_super_admin').then(({ data }) => { if (!annule) setSuperAdmin(data === true); });
+    return () => { annule = true; };
+  }, [user]);
+  useEffect(() => {
+    if (!user) return;
+    let annule = false;
+    supabase.from('commandes_en_ligne').select('id', { count: 'exact', head: true }).eq('statut', 'nouvelle')
+      .then(({ count }) => { if (!annule) setATraiter(count || 0); });
+    return () => { annule = true; };
+  }, [user, pathname]);
 
   // Envoie au patron les alertes du journal pas encore signalees.
   useEffect(() => { if (user) fetch('/api/journal/notifier', { method: 'POST' }).catch(() => {}); }, [user, pathname]);
@@ -79,7 +98,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <button key={item.href} onClick={() => naviguer(item.href)}
                 style={{ display: 'flex', alignItems: 'center', gap: '13px', padding: '11px 12px', borderRadius: '11px', cursor: 'pointer', border: 'none', width: '100%', textAlign: 'left', fontSize: '14px', fontWeight: active ? 700 : 500, background: active ? '#EDF2FD' : 'transparent', color: active ? '#2563EB' : '#5A6478' }}>
                 <span className="ms" style={{ fontSize: '21px', color: active ? '#2563EB' : '#9AA3B2' }}>{item.icon}</span>
-                <span>{item.label}</span>
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {item.href === '/admin/commandes' && aTraiter > 0 && <span style={{ fontSize: '11px', fontWeight: 800, color: '#fff', background: '#E8590C', borderRadius: '10px', padding: '1px 7px' }}>{aTraiter}</span>}
               </button>
             );
           })}
@@ -89,6 +109,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <button onClick={() => router.push('/vendeuse')} style={{ display: 'flex', alignItems: 'center', gap: '13px', padding: '11px 12px', borderRadius: '11px', cursor: 'pointer', border: 'none', width: '100%', textAlign: 'left', fontSize: '14px', fontWeight: 500, background: 'transparent', color: '#5A6478' }}>
           <span className="ms" style={{ fontSize: '21px', color: '#9AA3B2' }}>point_of_sale</span>Espace vendeuse
         </button>
+        {superAdmin && (
+          <button onClick={() => router.push('/fall-digital')} style={{ display: 'flex', alignItems: 'center', gap: '13px', padding: '11px 12px', borderRadius: '11px', cursor: 'pointer', border: 'none', width: '100%', textAlign: 'left', fontSize: '14px', fontWeight: 500, background: 'transparent', color: '#5A6478' }}>
+            <span className="ms" style={{ fontSize: '21px', color: '#9AA3B2' }}>admin_panel_settings</span>Console Fall Digital
+          </button>
+        )}
 
         {/* Notifications + Profil / déconnexion */}
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>

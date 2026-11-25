@@ -22,6 +22,7 @@ export const ICONES_JOURNAL: Record<string, string> = {
   poste_caisse_active: 'smartphone', poste_caisse_retire: 'mobile_off', pin_modifie: 'pin', pin_vendeuse_modifie: 'pin',
   periode_cloturee: 'restart_alt', objectif_defini: 'flag',
   alertes_modifiees: 'notifications', telegram_lie: 'send', telegram_delie: 'notifications_off',
+  site_cle_generee: 'key', site_desactive: 'link_off', commande_validee: 'shopping_cart_checkout', commande_refusee: 'remove_shopping_cart',
 };
 
 export function decrireEvenement(j: LigneJournal): string {
@@ -60,6 +61,10 @@ export function decrireEvenement(j: LigneJournal): string {
     }
     case 'telegram_lie': return `Telegram relié à la boutique (${d.conversation})`;
     case 'telegram_delie': return `${qui === 'Système' ? 'Telegram' : qui} : alertes Telegram délié${d.conversation ? ` (${d.conversation})` : ''}`;
+    case 'site_cle_generee': return `${qui} a généré une nouvelle clé du site web (${d.debut}…) : l'ancienne ne marche plus`;
+    case 'site_desactive': return `${qui} a coupé le lien avec le site web`;
+    case 'commande_validee': return `${qui} a validé la commande en ligne ${d.commande} de ${d.client} : ${f(j.montant)} FCFA (vente n° ${d.vente})`;
+    case 'commande_refusee': return `${qui} a refusé la commande en ligne ${d.commande} de ${d.client}${d.motif ? ` : ${d.motif}` : ''}`;
     case 'pin_modifie': return `${qui} a changé son code PIN`;
     case 'pin_vendeuse_modifie': return `${qui} a défini le code PIN de ${d.vendeuse}`;
     default: return `${qui} : ${j.action}`;

@@ -57,7 +57,7 @@ export async function proxy(request: NextRequest) {
 
   const gestion = role === 'admin' || role === 'proprietaire';
   if (pathname.startsWith('/admin') && !gestion) return rediriger('/');
-  if ((pathname.startsWith('/vendeuse') || pathname.startsWith('/abonnement')) && !user) return rediriger('/');
+  if ((pathname.startsWith('/vendeuse') || pathname.startsWith('/abonnement') || pathname.startsWith('/fall-digital')) && !user) return rediriger('/');
   if (pathname === '/' && user) return rediriger(gestion ? '/admin' : '/vendeuse');
   // Telephone caisse : l'accueil est l'ecran « Qui vend ? » (sauf ?compte=1,
   // pour que le gerant puisse quand meme se connecter avec son email).
@@ -68,5 +68,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/admin/:path*', '/vendeuse/:path*', '/abonnement'],
+  matcher: ['/', '/admin/:path*', '/vendeuse/:path*', '/abonnement', '/fall-digital/:path*'],
 };

@@ -11,7 +11,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 
 const env = Object.fromEntries(
   readFileSync('.env.local', 'utf8')
@@ -303,6 +303,50 @@ try {
   const qui = await poste.rpc('mon_acces');
   verifier('caisse : session ouverte pour la vendeuse A (et pas le patron)', !ses.error && qui.data?.utilisateur_id === vendA.id && qui.data?.role === 'vendeuse', ses.error?.message || JSON.stringify(qui.data));
   verifier("caisse : la vendeuse d'une autre boutique est refusee", (await service.rpc('caisse_verifier_pin', { p_jeton_hash: jeton, p_utilisateur_id: vendB.id, p_pin: '7391' })).data?.ok === false);
+
+  // ═══════════════════════════════════════════════════════════════
+  section('5 bis. Phase 6 : console Fall Digital, plan Solo, site web');
+  verifier('proprietaire A n\'est pas super-admin', (await propA.client.rpc('suis_super_admin')).data === false);
+  verifier('proprietaire A ne liste pas les boutiques', !!(await propA.client.rpc('sa_boutiques')).error);
+  verifier('anonyme ne lit pas le tableau Fall Digital', !!(await nouveauClient().rpc('sa_tableau')).error);
+  verifier('proprietaire A ne se prolonge pas', !!(await propA.client.rpc('sa_prolonger', { p_org: orgA, p_mois: 12, p_montant: 0, p_mode: 'cash' })).error);
+  verifier('gerant A ne passe pas en Pro', !!(await gerantA.client.rpc('sa_modifier_abonnement', { p_org: orgA, p_plan: 'pro' })).error);
+  verifier('proprietaire A ne desactive pas B', !!(await propA.client.rpc('sa_activer_boutique', { p_org: orgB, p_actif: false })).error);
+  verifier('personne ne lit la liste des super-admins', lignes(await propA.client.from('super_admins').select('auth_id')).length === 0);
+  verifier('proprietaire A n\'invente pas un paiement', bloque(await propA.client.from('abonnements_paiements').insert({ organisation_id: orgA, montant: 1, mode: 'cash', plan: 'pro', mois: 12, du: new Date().toISOString(), au: new Date(Date.now() + 365 * jour).toISOString() }).select()));
+  {
+    const email = `test-${randomUUID().slice(0, 8)}@fallik-test.local`;
+    const { data: a } = await service.auth.admin.createUser({ email, password: randomUUID(), email_confirm: true, app_metadata: { role: 'vendeuse' } });
+    if (a?.user) jetables.auth.push(a.user.id);
+    const r = await service.from('utilisateurs').insert({ organisation_id: orgA, nom: 'Vendeuse A3', email, role: 'vendeuse', actif: true, auth_id: a?.user?.id }).select('id');
+    verifier('Solo : 3e vendeuse refusee meme avec la cle secrete', !!r.error && r.error.message.includes('Plan Solo'), r.error?.message);
+  }
+  verifier('Solo : pas de cle de site web', !!(await propA.client.rpc('site_generer_cle', { p_cle_hash: 'e'.repeat(64), p_cle_debut: 'fk_test' })).error);
+  await service.from('abonnements').update({ plan: 'pro' }).eq('organisation_id', orgA);
+  const cleSite = `fk_test_${randomUUID()}`, hashSite = createHash('sha256').update(cleSite).digest('hex');
+  verifier('Pro : le gerant ne genere pas la cle', !!(await gerantA.client.rpc('site_generer_cle', { p_cle_hash: hashSite, p_cle_debut: 'fk_test' })).error);
+  verifier('Pro : le proprietaire genere la cle', !(await propA.client.rpc('site_generer_cle', { p_cle_hash: hashSite, p_cle_debut: 'fk_test' })).error);
+  verifier('le gerant ne lit pas l\'empreinte de la cle', !!(await gerantA.client.from('sites_web').select('cle_hash')).error);
+  verifier('B ne voit pas le site de A', lignes(await propB.client.from('sites_web').select('organisation_id')).length === 0);
+  verifier('un connecte n\'appelle pas site_catalogue', !!(await propA.client.rpc('site_catalogue', { p_cle_hash: hashSite })).error);
+  verifier('anonyme n\'appelle pas site_commander', !!(await nouveauClient().rpc('site_commander', { p_cle_hash: hashSite, p_client: {}, p_lignes: [], p_ip_hash: null })).error);
+  const cat = await service.rpc('site_catalogue', { p_cle_hash: hashSite });
+  verifier('catalogue : uniquement les produits de A', cat.data?.produits?.length === 1 && cat.data.produits[0].id === prodA, JSON.stringify(cat.data || cat.error?.message));
+  const cmdB = await service.rpc('site_commander', { p_cle_hash: hashSite, p_client: { nom: 'X', telephone: '690000000' }, p_lignes: [{ produit_id: prodB, quantite: 1 }], p_ip_hash: 'test' });
+  verifier('commande d\'un produit de B via le site de A refusee', cmdB.data?.ok === false);
+  const cmd = await service.rpc('site_commander', { p_cle_hash: hashSite, p_client: { nom: 'Cliente web', telephone: '690000000' }, p_lignes: [{ produit_id: prodA, quantite: 1 }], p_ip_hash: 'test' });
+  verifier('commande du site acceptee', cmd.data?.ok === true, JSON.stringify(cmd.data || cmd.error?.message));
+  const cmds = lignes(await gerantA.client.from('commandes_en_ligne').select('id'));
+  verifier('le gerant A voit la commande', cmds.length === 1);
+  verifier('la vendeuse A ne voit pas les commandes', lignes(await vendA.client.from('commandes_en_ligne').select('id')).length === 0);
+  verifier('B ne voit pas les commandes de A', lignes(await propB.client.from('commandes_en_ligne').select('id')).length === 0);
+  verifier('B ne valide pas la commande de A', !!(await propB.client.rpc('commande_valider', { p_id: cmds[0]?.id, p_mode: 'cash' })).error);
+  verifier('la vendeuse A ne valide pas', !!(await vendA.client.rpc('commande_valider', { p_id: cmds[0]?.id, p_mode: 'cash' })).error);
+  verifier('le gerant A ne modifie pas la commande directement', bloque(await gerantA.client.from('commandes_en_ligne').update({ total: 1 }).eq('id', cmds[0]?.id).select()));
+  const val = await gerantA.client.rpc('commande_valider', { p_id: cmds[0]?.id, p_mode: 'cash' });
+  verifier('le gerant A valide : vente creee', !val.error && Number(val.data) > 0, val.error?.message);
+  await service.from('abonnements').update({ plan: 'solo' }).eq('organisation_id', orgA);
+  verifier('repasse en Solo : le site est coupe', (await service.rpc('site_catalogue', { p_cle_hash: hashSite })).data === null);
 
   // ═══════════════════════════════════════════════════════════════
   section('5. Boutique expiree (C)');

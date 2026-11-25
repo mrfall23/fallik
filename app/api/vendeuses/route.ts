@@ -8,6 +8,8 @@ import { accesGestion } from '@/lib/acces-serveur';
 // verifier elle-meme que l'appelant est un admin actif ET rattacher/limiter
 // les operations a SON organisation.
 
+const LIMITE_SOLO = 2;
+
 function clientAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL as string,
@@ -41,6 +43,17 @@ export async function POST(request: Request) {
   const admin = clientAdmin();
   const emailNormalise = email.trim().toLowerCase();
 
+  // Plan Solo : 2 vendeuses actives (la base le verifie aussi). Controle
+  // AVANT de creer le compte, pour ne pas laisser de compte orphelin.
+  const { data: abo } = await admin.from('abonnements').select('plan').eq('organisation_id', ctx.orgId).maybeSingle();
+  if (abo?.plan !== 'pro') {
+    const { count } = await admin.from('utilisateurs').select('id', { count: 'exact', head: true })
+      .eq('organisation_id', ctx.orgId).eq('role', 'vendeuse').eq('actif', true);
+    if ((count || 0) >= LIMITE_SOLO) {
+      return NextResponse.json({ message: `Plan Solo : ${LIMITE_SOLO} vendeuses actives au maximum. Passez au plan Pro pour en ajouter.` }, { status: 403 });
+    }
+  }
+
   const { data: cree, error: erreurAuth } = await admin.auth.admin.createUser({
     email: emailNormalise,
     password: motDePasse,
@@ -67,6 +80,7 @@ export async function POST(request: Request) {
   });
   if (erreurLigne) {
     await admin.auth.admin.deleteUser(cree.user.id);
+    if (erreurLigne.message.includes('Plan Solo')) return NextResponse.json({ message: erreurLigne.message }, { status: 403 });
     const dejaPris = erreurLigne.code === '23505';
     return NextResponse.json(
       { message: dejaPris ? 'Cet email est déjà utilisé.' : 'Erreur lors de la création du compte.' },
