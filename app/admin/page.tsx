@@ -72,7 +72,7 @@ function Legende({ segments, total }: { segments: Segment[]; total: number }) {
 async function lireTout() {
   const [{ data, error }, { data: prods }, boutique] = await Promise.all([
     supabase.rpc('tableau_de_bord_admin'),
-    supabase.from('produits').select('id, nom, prix, stock_restant, actif'),
+    supabase.from('produits').select('id, nom, prix, stock_restant, actif, suivi_stock'),
     lireBoutique(),
   ]);
   return { d: error ? null : (data as Tableau), erreur: error?.message || '', prods: prods || [], boutique };
@@ -125,7 +125,7 @@ export default function Dashboard() {
   const ca = N(st.total_ventes), nb = N(st.nb_ventes);
 
   // Stock (produits en vente uniquement)
-  const actifs = prods.filter((p: any) => p.actif !== false);
+  const actifs = prods.filter((p: any) => p.actif !== false && p.suivi_stock !== false); // services : pas de stock
   const valeurStock = actifs.reduce((a: number, p: any) => a + Number(p.prix) * Math.max(0, Number(p.stock_restant)), 0);
   const ruptures = actifs.filter((p: any) => p.stock_restant <= 0).length;
   const alertes = actifs.filter((p: any) => p.stock_restant <= seuil).sort((a: any, b: any) => a.stock_restant - b.stock_restant).slice(0, 5);

@@ -7,6 +7,7 @@ import PushToggle from '../components/PushToggle';
 import { FallikLogo } from '../components/Logo';
 import { LIBELLES_ROLE } from '@/lib/roles';
 import { supabase } from '@/lib/supabase';
+import { activite } from '@/lib/activites';
 
 const NAV = [
   { href: '/admin', icon: 'space_dashboard', label: 'Tableau de bord' },
@@ -36,6 +37,7 @@ const TITRES: Record<string, [string, string]> = {
   '/admin/inventaire': ['Inventaire', 'Comptage physique et écarts de stock'],
   '/admin/caisses': ['Clôtures de caisse', 'Espèces déclarées et écarts'],
   '/admin/journal': ['Journal', 'Actions sensibles, impossibles à effacer'],
+  '/admin/depots': ['Dépôts', 'Vêtements déposés, prêts et retirés'],
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -66,7 +68,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (!user) return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />;
 
-  const [pageTitle, pageSub] = TITRES[pathname] || ['', ''];
+  // Menus et mots selon le type de commerce.
+  const typeActivite = acces?.type_activite || 'boutique';
+  const act = activite(typeActivite);
+  const nav = NAV.flatMap(item => {
+    if (item.href === '/admin/produits') return [{ ...item, label: act.menuArticles }];
+    if (item.href === '/admin' && typeActivite === 'pressing') return [item, { href: '/admin/depots', icon: 'local_laundry_service', label: 'Dépôts' }];
+    return [item];
+  });
+  const [titreBase, pageSub] = TITRES[pathname] || ['', ''];
+  const pageTitle = pathname === '/admin/produits' ? act.menuArticles : titreBase;
   const initial = user.nom?.trim()[0]?.toUpperCase() || 'A';
   const naviguer = (href: string) => { router.push(href); setMenuOuvert(false); };
   const dateJour = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -92,7 +103,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1.2px', color: '#9AA3B2', padding: '0 10px 10px' }}>PILOTAGE</div>
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-          {NAV.map(item => {
+          {nav.map(item => {
             const active = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
             return (
               <button key={item.href} onClick={() => naviguer(item.href)}

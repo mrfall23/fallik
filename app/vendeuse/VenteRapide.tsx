@@ -127,7 +127,7 @@ export default function VenteRapide({ produits, rechargerProduits, user, isMobil
                 {produit.image ? <img src={produit.image} alt={produit.nom} style={{ width: '100%', height: '84px', objectFit: 'cover', borderRadius: '12px', marginBottom: '12px' }} />
                   : <div style={{ height: '84px', borderRadius: '12px', marginBottom: '12px', background: '#EEF3FC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="ms" style={{ fontSize: '32px', color: '#B7C4DE' }}>image</span></div>}
                 <div style={{ fontSize: '13.5px', fontWeight: 600, color: INK, lineHeight: 1.3, marginBottom: '4px' }}>{produit.nom}</div>
-                <div style={{ fontSize: '11.5px', color: epuise ? '#D24444' : stockRestant <= 2 ? '#C8891F' : MUTE, marginBottom: '8px' }}>{epuise ? 'Épuisé' : `${stockRestant} disponible${stockRestant > 1 ? 's' : ''}`}</div>
+                <div style={{ fontSize: '11.5px', color: epuise ? '#D24444' : stockRestant <= 2 ? '#C8891F' : MUTE, marginBottom: '8px' }}>{produit.suivi_stock === false ? 'Service' : epuise ? 'Épuisé' : `${stockRestant} disponible${stockRestant > 1 ? 's' : ''}`}</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '13.5px', fontWeight: 700, color: BLUE }}>{fmt(produit.prix)} FCFA</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

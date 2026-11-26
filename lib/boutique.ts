@@ -17,10 +17,11 @@ export type Boutique = {
   remise_max_pct: number;
   telephone: string | null;
   adresse: string | null;
+  type_activite: string;
 };
 
 export const COLONNES_BOUTIQUE =
-  'id, nom, logo_url, couleur_principale, couleur_secondaire, devise, fuseau_horaire, seuil_stock_bas, remise_max_pct, telephone, adresse';
+  'id, nom, logo_url, couleur_principale, couleur_secondaire, devise, fuseau_horaire, seuil_stock_bas, remise_max_pct, telephone, adresse, type_activite';
 
 export const SEUIL_STOCK_BAS_DEFAUT = 5;
 

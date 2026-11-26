@@ -5,9 +5,9 @@ import { useBoutique, SEUIL_STOCK_BAS_DEFAUT } from '@/lib/boutique';
 import { signalerAuPatron } from '../../components/ValidationGerant';
 import PanneauStock from './PanneauStock';
 
-type Produit = { id: number; nom: string; prix: number; description: string; stock_restant: number; stock_initial: number; image: string | null; actif: boolean };
-type FormProduit = { nom: string; prix: number; description: string; stock_restant: number; image: string | null; prix_achat: string };
-const FORM_VIDE: FormProduit = { nom: '', prix: 0, description: '', stock_restant: 0, image: null, prix_achat: '' };
+type Produit = { id: number; nom: string; prix: number; description: string; stock_restant: number; stock_initial: number; image: string | null; actif: boolean; suivi_stock: boolean };
+type FormProduit = { nom: string; prix: number; description: string; stock_restant: number; image: string | null; prix_achat: string; service: boolean };
+const FORM_VIDE: FormProduit = { nom: '', prix: 0, description: '', stock_restant: 0, image: null, prix_achat: '', service: false };
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 
 const INK = '#1A2438', BLUE = '#2563EB', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
@@ -59,7 +59,7 @@ export default function AdminProduits() {
 
   const ouvrirAjout = () => { setForm(FORM_VIDE); setProduitEdite(null); setErreurForm(''); setModalOuvert(true); };
   const ouvrirEdit = (p: Produit) => {
-    setForm({ nom: p.nom, prix: p.prix, description: p.description || '', stock_restant: p.stock_restant, image: p.image, prix_achat: couts[p.id] !== undefined ? String(couts[p.id]) : '' });
+    setForm({ nom: p.nom, prix: p.prix, description: p.description || '', stock_restant: p.stock_restant, image: p.image, prix_achat: couts[p.id] !== undefined ? String(couts[p.id]) : '', service: p.suivi_stock === false });
     setProduitEdite(p); setErreurForm(''); setModalOuvert(true);
   };
   const fermerModal = () => { setModalOuvert(false); setProduitEdite(null); };
@@ -71,7 +71,9 @@ export default function AdminProduits() {
     const prixAchat = form.prix_achat.trim() === '' ? null : Number(form.prix_achat);
     if (prixAchat !== null && (isNaN(prixAchat) || prixAchat < 0)) { setErreurForm("Prix d'achat invalide."); return; }
     setSauvegarde(true); setErreurForm('');
-    const champs = { nom: form.nom.trim(), prix: form.prix, description: form.description, image: form.image };
+    const champs = { nom: form.nom.trim(), prix: form.prix, description: form.description, image: form.image, suivi_stock: !form.service };
+    if (produitEdite && produitEdite.suivi_stock !== false && form.service && produitEdite.stock_restant > 0
+      && !confirm(`« ${produitEdite.nom} » deviendra un service sans stock : les ${produitEdite.stock_restant} en stock ne seront plus comptés. Continuer ?`)) { setSauvegarde(false); return; }
     let produitId = produitEdite?.id;
     if (produitEdite) {
       // Le stock d'un produit existant ne se modifie plus ici : uniquement par
@@ -114,6 +116,7 @@ export default function AdminProduits() {
   };
 
   const badge = (p: Produit): { text: string; col: string; bg: string } => {
+    if (p.suivi_stock === false) return { text: 'Service', col: BLUE, bg: '#EEF3FC' };
     if (p.stock_restant <= 0) return { text: 'Épuisé', col: '#D24444', bg: 'rgba(210,68,68,.10)' };
     if (p.stock_restant <= (boutique?.seuil_stock_bas ?? SEUIL_STOCK_BAS_DEFAUT)) return { text: `${p.stock_restant} en stock`, col: '#C8891F', bg: 'rgba(200,137,31,.14)' };
     return { text: `${p.stock_restant} en stock`, col: '#1F9D6B', bg: 'rgba(31,157,107,.12)' };
@@ -126,10 +129,12 @@ export default function AdminProduits() {
   }, [produits, q, voirRetires]);
 
   const actifs = useMemo(() => produits.filter(p => p.actif), [produits]);
-  const valeurTotale = useMemo(() => actifs.reduce((a, p) => a + Number(p.prix) * Number(p.stock_restant), 0), [actifs]);
+  // Les services (sans stock) ne comptent pas dans la valeur du stock.
+  const stockes = useMemo(() => actifs.filter(p => p.suivi_stock !== false), [actifs]);
+  const valeurTotale = useMemo(() => stockes.reduce((a, p) => a + Number(p.prix) * Number(p.stock_restant), 0), [stockes]);
   // Valeur d'achat du stock (seulement les produits qui ont un prix d'achat).
-  const valeurAchat = useMemo(() => actifs.reduce((a, p) => a + (couts[p.id] !== undefined ? couts[p.id] * Number(p.stock_restant) : 0), 0), [actifs, couts]);
-  const ruptures = useMemo(() => actifs.filter(p => p.stock_restant <= 0).length, [actifs]);
+  const valeurAchat = useMemo(() => stockes.reduce((a, p) => a + (couts[p.id] !== undefined ? couts[p.id] * Number(p.stock_restant) : 0), 0), [stockes, couts]);
+  const ruptures = useMemo(() => stockes.filter(p => p.stock_restant <= 0).length, [stockes]);
   const nbRetires = produits.length - actifs.length;
 
   const miniStats = [
@@ -238,12 +243,12 @@ export default function AdminProduits() {
                       <td style={{ ...td, textAlign: 'center' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: b.col, background: b.bg, padding: '5px 12px', borderRadius: '20px', whiteSpace: 'nowrap' }}>{b.text}</span>
                       </td>
-                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', fontSize: '14px', fontWeight: 700, color: '#5A6472' }}>{fmt(Number(p.prix) * Number(p.stock_restant))}</td>
+                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', fontSize: '14px', fontWeight: 700, color: '#5A6472' }}>{p.suivi_stock === false ? '—' : fmt(Number(p.prix) * Number(p.stock_restant))}</td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', gap: '8px' }}>
-                          <button onClick={() => setStockOuvert(stockOuvert === p.id ? null : p.id)} aria-expanded={stockOuvert === p.id} aria-label={`Stock de ${p.nom}`} style={{ ...petitBouton, background: stockOuvert === p.id ? BLUE : '#EEF3FC', color: stockOuvert === p.id ? '#fff' : BLUE }}>
+                          {p.suivi_stock !== false && <button onClick={() => setStockOuvert(stockOuvert === p.id ? null : p.id)} aria-expanded={stockOuvert === p.id} aria-label={`Stock de ${p.nom}`} style={{ ...petitBouton, background: stockOuvert === p.id ? BLUE : '#EEF3FC', color: stockOuvert === p.id ? '#fff' : BLUE }}>
                             <span className="ms" style={{ fontSize: '18px' }}>inventory</span>Stock
-                          </button>
+                          </button>}
                           <button onClick={() => ouvrirEdit(p)} aria-label={`Modifier ${p.nom}`} style={{ ...petitBouton, background: '#EEF3FC', color: BLUE }}>
                             <span className="ms" style={{ fontSize: '18px' }}>edit</span>Modifier
                           </button>
@@ -299,10 +304,15 @@ export default function AdminProduits() {
                     </div>
                   )}
                 </div>
-                {produitEdite ? (
+                {form.service ? null : produitEdite && produitEdite.suivi_stock !== false ? (
                   <div>
                     <div style={labelStyle}>Stock</div>
                     <div style={{ fontSize: '13px', color: SOFT, lineHeight: 1.45, paddingTop: '4px' }}>{produitEdite.stock_restant} en stock. Pour le changer : bouton <b>Stock</b> (réassort ou correction), pour que tout soit tracé.</div>
+                  </div>
+                ) : produitEdite ? (
+                  <div>
+                    <div style={labelStyle}>Stock</div>
+                    <div style={{ fontSize: '13px', color: SOFT, lineHeight: 1.45, paddingTop: '4px' }}>Part de 0. Ajoutez ensuite avec le bouton <b>Stock</b>.</div>
                   </div>
                 ) : (
                   <div>
@@ -315,6 +325,10 @@ export default function AdminProduits() {
                   <input style={inputStyle} value={form.image || ''} onChange={e => setForm({ ...form, image: e.target.value || null })} placeholder="https://…" />
                 </div>
               </div>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '16px', padding: '12px 14px', borderRadius: '12px', background: '#F6F8FC', border: '1px solid #E4E9F2', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.service} onChange={e => setForm({ ...form, service: e.target.checked })} style={{ marginTop: '3px', width: '17px', height: '17px' }} />
+                <span style={{ fontSize: '13.5px', color: INK, lineHeight: 1.45 }}><b>C&apos;est un service</b> (pas de stock)<br /><span style={{ color: SOFT, fontSize: '12.5px' }}>Ex. : repassage d&apos;une chemise, coupe, plat cuisiné. Il se vend sans compter de stock.</span></span>
+              </label>
               <div style={{ marginBottom: '20px' }}>
                 <div style={labelStyle}>Description</div>
                 <textarea style={{ ...inputStyle, height: '72px', resize: 'vertical', paddingTop: '12px' }} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Description optionnelle…" />

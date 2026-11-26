@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useIsMobile } from './components/useMediaQuery';
 import { FallikLogo } from './components/Logo';
 import { accueilPourRole } from '@/lib/roles';
+import { ACTIVITES, TYPES_ACTIVITE, type TypeActivite } from '@/lib/activites';
 
 type Mode = 'connexion' | 'inscription';
 
@@ -20,6 +21,7 @@ export default function AccueilPage() {
   const [nomBoutique, setNomBoutique] = useState('');
   const [nom, setNom] = useState('');
   const [siteWeb, setSiteWeb] = useState(''); // champ piege anti-robots, invisible
+  const [typeActivite, setTypeActivite] = useState<TypeActivite | ''>('');
   const [erreur, setErreur] = useState('');
   const [chargement, setChargement] = useState(false);
   const router = useRouter();
@@ -47,10 +49,11 @@ export default function AccueilPage() {
   };
 
   const sInscrire = async () => {
+    if (!typeActivite) { setErreur('Choisissez votre type de commerce.'); return; }
     if (!nomBoutique.trim() || !nom.trim() || !email || !motDePasse) { setErreur('Veuillez remplir tous les champs.'); return; }
     if (motDePasse.length < 8) { setErreur('Le mot de passe doit faire au moins 8 caractères.'); return; }
     setErreur(''); setChargement(true);
-    const reponse = await fetch('/api/inscription', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nomBoutique, nom, email, motDePasse, siteWeb }) });
+    const reponse = await fetch('/api/inscription', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nomBoutique, nom, email, motDePasse, siteWeb, typeActivite }) });
     const resultat = await reponse.json().catch(() => ({}));
     if (!reponse.ok) { setChargement(false); setErreur(resultat.message || 'Une erreur est survenue.'); return; }
     const r = await connecter(email, motDePasse);
@@ -82,8 +85,24 @@ export default function AccueilPage() {
           {mode === 'inscription' && (
             <>
               <div style={{ marginBottom: '16px' }}>
+                <label style={labelStyle}>Quel est votre commerce ?</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  {TYPES_ACTIVITE.map(t => {
+                    const a = ACTIVITES[t], choisi = typeActivite === t;
+                    return (
+                      <button key={t} type="button" onClick={() => { setTypeActivite(t); setErreur(''); }} aria-pressed={choisi}
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '10px 4px', borderRadius: '12px', cursor: 'pointer', border: `1.5px solid ${choisi ? '#2563EB' : '#E1E7F2'}`, background: choisi ? '#EDF2FD' : '#fff', color: choisi ? '#2563EB' : '#5A6478' }}>
+                        <span className="ms" style={{ fontSize: '24px' }}>{a.icone}</span>
+                        <span style={{ fontSize: '12px', fontWeight: 700, lineHeight: 1.15, textAlign: 'center' }}>{a.nom}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {typeActivite && <div style={{ fontSize: '12px', color: '#8A94A6', marginTop: '6px' }}>{ACTIVITES[typeActivite].description}{ACTIVITES[typeActivite].catalogue.length ? ' · des exemples de prix seront créés pour vous, à corriger.' : ''}</div>}
+              </div>
+              <div style={{ marginBottom: '16px' }}>
                 <label style={labelStyle}>Nom de la boutique</label>
-                <input style={champStyle} placeholder="Ex. Bar du Coin" value={nomBoutique} onChange={e => setNomBoutique(e.target.value)} onKeyDown={surEntree} />
+                <input style={champStyle} placeholder={typeActivite ? ACTIVITES[typeActivite].exempleNom : 'Ex. Bar du Coin'} value={nomBoutique} onChange={e => setNomBoutique(e.target.value)} onKeyDown={surEntree} />
               </div>
               <div style={{ marginBottom: '16px' }}>
                 <label style={labelStyle}>Votre nom</label>

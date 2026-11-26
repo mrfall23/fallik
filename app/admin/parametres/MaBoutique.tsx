@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { lireBoutique, type Boutique } from '@/lib/boutique';
 import { LIBELLES_STATUT, PLANS } from '@/lib/roles';
+import { ACTIVITES, TYPES_ACTIVITE } from '@/lib/activites';
 
 // Reglages de la boutique (proprietaire et gerant) + abonnement (lecture
 // seule, proprietaire uniquement : la RLS ne le montre qu'a lui, et seul
@@ -27,6 +28,7 @@ export default function MaBoutique({ estProprietaire }: { estProprietaire: boole
   const [sauvegarde, setSauvegarde] = useState(false);
   const [message, setMessage] = useState('');
   const [erreur, setErreur] = useState('');
+  const [typeInitial, setTypeInitial] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -35,7 +37,9 @@ export default function MaBoutique({ estProprietaire }: { estProprietaire: boole
         nom: b.nom, logo_url: b.logo_url || '', couleur_principale: b.couleur_principale, couleur_secondaire: b.couleur_secondaire,
         devise: b.devise, fuseau_horaire: b.fuseau_horaire, seuil_stock_bas: String(b.seuil_stock_bas),
         remise_max_pct: String(b.remise_max_pct), telephone: b.telephone || '', adresse: b.adresse || '',
+        type_activite: b.type_activite || 'boutique',
       });
+      if (b) setTypeInitial(b.type_activite || 'boutique');
       if (estProprietaire) {
         const { data } = await supabase.from('abonnements').select('plan, statut, date_expiration').maybeSingle();
         const a = data as Abonnement | null;
@@ -66,9 +70,12 @@ export default function MaBoutique({ estProprietaire }: { estProprietaire: boole
       remise_max_pct: remise,
       telephone: form.telephone.trim() || null,
       adresse: form.adresse.trim() || null,
+      type_activite: form.type_activite,
     }).not('id', 'is', null); // la RLS limite deja a la boutique de l'utilisateur
     setSauvegarde(false);
     if (error) return setErreur("Impossible d'enregistrer : " + error.message);
+    // Nouveau type de commerce : les menus changent, on recharge l'ecran.
+    if (form.type_activite !== typeInitial) { window.location.reload(); return; }
     setMessage('Réglages enregistrés.');
     setTimeout(() => setMessage(''), 3000);
   };
@@ -95,6 +102,11 @@ export default function MaBoutique({ estProprietaire }: { estProprietaire: boole
       <div style={carte}>
         <div style={titre}><span className="ms" style={{ fontSize: '20px', color: '#2563EB' }}>storefront</span>Ma boutique</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '14px' }}>
+          <div><div style={labelStyle}>Type de commerce</div>
+            <select style={inputStyle} value={form.type_activite} onChange={e => maj('type_activite', e.target.value)}>
+              {TYPES_ACTIVITE.map(t => <option key={t} value={t}>{ACTIVITES[t].nom}</option>)}
+            </select>
+          </div>
           <div><div style={labelStyle}>Nom de la boutique *</div><input style={inputStyle} value={form.nom} maxLength={80} onChange={e => maj('nom', e.target.value)} /></div>
           <div><div style={labelStyle}>Téléphone</div><input style={inputStyle} value={form.telephone} onChange={e => maj('telephone', e.target.value)} placeholder="Ex : 677 12 34 56" /></div>
           <div><div style={labelStyle}>Adresse</div><input style={inputStyle} value={form.adresse} onChange={e => maj('adresse', e.target.value)} placeholder="Ex : Marché central, Yaoundé" /></div>

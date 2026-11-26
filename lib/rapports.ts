@@ -229,7 +229,7 @@ export function feuillesPeriode(b: Bornes, ventes: Vente[], d: Details, a: Retur
 // ─── Exports independants de la periode ───────────────────────────────
 export async function feuilleStock(dev: string, seuil: number): Promise<Feuille[]> {
   const [produits, couts] = await Promise.all([
-    toutLire<any>(() => supabase.from('produits').select('id, nom, prix, stock_restant, actif').order('nom').order('id')),
+    toutLire<any>(() => supabase.from('produits').select('id, nom, prix, stock_restant, actif').eq('suivi_stock', true).order('nom').order('id')),
     toutLire<any>(() => supabase.from('produits_couts').select('produit_id, prix_achat').order('produit_id')),
   ]);
   const pa = new Map<number, number>(couts.map(c => [c.produit_id, N(c.prix_achat)]));

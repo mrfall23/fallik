@@ -129,7 +129,7 @@ export default function FactureDetail({ factureId, produits, rechargerProduits, 
               return (
                 <div key={p.id} style={{ padding: '12px', borderRadius: '14px', background: '#fff', border: `1px solid ${qte > 0 ? 'rgba(37,99,235,.45)' : LINE}`, boxShadow: qte > 0 ? '0 4px 14px rgba(37,99,235,.12)' : '0 3px 10px rgba(26,36,56,.04)', opacity: epuise ? 0.5 : 1 }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: INK, lineHeight: 1.25, marginBottom: '3px' }}>{p.nom}</div>
-                  <div style={{ fontSize: '11px', color: p.stock_restant <= 0 ? '#D24444' : p.stock_restant <= 2 ? '#C8891F' : MUTE, marginBottom: '8px' }}>{p.stock_restant <= 0 ? 'Épuisé' : `${p.stock_restant} dispo`}</div>
+                  <div style={{ fontSize: '11px', color: p.stock_restant <= 0 ? '#D24444' : p.stock_restant <= 2 ? '#C8891F' : MUTE, marginBottom: '8px' }}>{p.suivi_stock === false ? 'Service' : p.stock_restant <= 0 ? 'Épuisé' : `${p.stock_restant} dispo`}</div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
                     <span style={{ fontSize: '12.5px', fontWeight: 700, color: BLUE }}>{fmt(p.prix)}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>

@@ -9,6 +9,7 @@ import FactureDetail from './FactureDetail';
 import ClotureCaisse from './ClotureCaisse';
 import MesVentes from './MesVentes';
 import MonObjectif from './MonObjectif';
+import Depots from '../components/Depots';
 import RecuModal, { enteteRecu } from '../components/RecuModal';
 import { type RecuData } from '../components/Recu';
 import { lireBoutique, type Boutique } from '@/lib/boutique';
@@ -22,13 +23,14 @@ const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const INK = '#1A2438', BLUE = '#2563EB', GRAD = 'linear-gradient(135deg,#4B7DF5,#1D4FD0)', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
 
 export default function VendeusePage() {
-  const { utilisateur: user } = useUtilisateur();
+  const { utilisateur: user, acces } = useUtilisateur();
+  const pressing = acces?.type_activite === 'pressing';
   const isMobile = useIsMobile();
   const [produits, setProduits] = useState<any[]>([]);
   const [factures, setFactures] = useState<any[]>([]);
   const [boutique, setBoutique] = useState<Boutique | null>(null);
   const [chargement, setChargement] = useState(true);
-  const [vue, setVue] = useState<'factures' | 'rapide' | 'historique'>('factures');
+  const [vue, setVue] = useState<'depots' | 'factures' | 'rapide' | 'historique'>('factures');
   const [recuHisto, setRecuHisto] = useState<RecuData | null>(null);
   const [versionHisto, setVersionHisto] = useState(0); // recharge « Mes ventes »
   const [enLigne, setEnLigne] = useState(true);
@@ -137,7 +139,9 @@ export default function VendeusePage() {
   const visibles = factures.filter(f => gestion || f.vendeuse_id === user?.id);
 
   const entete = enteteRecu(boutique);
-  const ONGLETS = { factures: ['receipt_long', 'Factures ouvertes', 'Factures'], rapide: ['bolt', 'Vente rapide', 'Rapide'], historique: ['history', 'Mes ventes', 'Mes ventes'] } as const;
+  // Pressing : l'ecran d'accueil est celui des depots (pas de factures ouvertes).
+  const vueA = pressing && vue === 'factures' ? 'depots' : vue;
+  const ONGLETS = { depots: ['local_laundry_service', 'Dépôts', 'Dépôts'], factures: ['receipt_long', 'Factures ouvertes', 'Factures'], rapide: ['bolt', 'Vente rapide', 'Rapide'], historique: ['history', 'Mes ventes', 'Mes ventes'] } as const;
 
   const nbArticles = (f: any) => (f.facture_lignes || []).reduce((s: number, l: any) => s + (l.quantite || 0), 0);
 
@@ -190,8 +194,8 @@ export default function VendeusePage() {
           {/* Bascule */}
           <div style={{ display: 'flex', padding: isMobile ? '16px 16px 0' : '22px 32px 0', maxWidth: '1400px', margin: '0 auto' }}>
             <div style={{ display: 'flex', gap: '2px', background: '#EEF1F7', borderRadius: '13px', padding: '4px' }}>
-              {(['factures', 'rapide', 'historique'] as const).map(v => (
-                <button key={v} onClick={() => setVue(v)} style={{ height: '40px', padding: isMobile ? '0 11px' : '0 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '13.5px', fontWeight: 700, background: vue === v ? '#fff' : 'transparent', color: vue === v ? BLUE : SOFT, boxShadow: vue === v ? '0 1px 3px rgba(26,36,56,.12)' : 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {((pressing ? ['depots', 'rapide', 'historique'] : ['factures', 'rapide', 'historique']) as ('depots' | 'factures' | 'rapide' | 'historique')[]).map(v => (
+                <button key={v} onClick={() => setVue(v)} style={{ height: '40px', padding: isMobile ? '0 11px' : '0 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '13.5px', fontWeight: 700, background: vueA === v ? '#fff' : 'transparent', color: vueA === v ? BLUE : SOFT, boxShadow: vueA === v ? '0 1px 3px rgba(26,36,56,.12)' : 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span className="ms" style={{ fontSize: '19px' }}>{ONGLETS[v][0]}</span>
                   {isMobile ? ONGLETS[v][2] : ONGLETS[v][1]}
                 </button>
@@ -201,9 +205,11 @@ export default function VendeusePage() {
 
           <MonObjectif rafraichir={versionHisto} devise={boutique?.devise || 'FCFA'} isMobile={isMobile} />
 
-          {vue === 'historique' ? (
+          {vueA === 'depots' ? (
+            <Depots isMobile={isMobile} />
+          ) : vueA === 'historique' ? (
             <MesVentes isMobile={isMobile} vendeuseNom={user?.nom || ''} enAttente={enAttente} rafraichir={versionHisto} entete={entete} onRecu={setRecuHisto} />
-          ) : vue === 'rapide' ? (
+          ) : vueA === 'rapide' ? (
             <VenteRapide produits={produits} rechargerProduits={chargerProduits} user={user} isMobile={isMobile} entete={entete}
               onVente={() => { setEnAttente(mesAttentes()); setVersionHisto(x => x + 1); }} />
           ) : (

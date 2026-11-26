@@ -24,7 +24,7 @@ export default function AdminInventaire() {
   const [message, setMessage] = useState('');
 
   const lire = () => Promise.all([
-    supabase.from('produits').select('id, nom, prix, stock_restant').eq('actif', true).order('nom'),
+    supabase.from('produits').select('id, nom, prix, stock_restant').eq('actif', true).eq('suivi_stock', true).order('nom'),
     supabase.from('inventaires').select('*').order('cree_le', { ascending: false }).limit(30),
   ]);
   const charger = async () => {

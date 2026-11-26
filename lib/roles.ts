@@ -36,6 +36,7 @@ export type Acces = {
   organisation_id: number;
   organisation: string;
   organisation_active: boolean;
+  type_activite?: string;
   plan: string | null;
   statut: string | null;
   date_expiration: string | null;

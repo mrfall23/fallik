@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { ACTIVITES, type TypeActivite } from '@/lib/activites';
 
 // Inscription d'une nouvelle boutique (organisation) + son proprietaire.
 // Route publique (pas encore de session) mais qui utilise la cle secrete cote
@@ -41,7 +42,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export async function POST(request: Request) {
   const corps = await request.json().catch(() => ({}));
-  const { nomBoutique, nom, email, motDePasse, siteWeb } = corps as Record<string, string | undefined>;
+  const { nomBoutique, nom, email, motDePasse, siteWeb, typeActivite } = corps as Record<string, string | undefined>;
+  const type: TypeActivite = typeActivite && typeActivite in ACTIVITES ? (typeActivite as TypeActivite) : 'boutique';
 
   // Champ piege : invisible pour un humain. Reponse neutre, rien n'est cree.
   if (siteWeb) return NextResponse.json({ message: 'Boutique créée.' }, { status: 201 });
@@ -104,7 +106,7 @@ export async function POST(request: Request) {
   const slug = (slugify(nomBoutique) || 'boutique') + '-' + Math.random().toString(36).slice(2, 6);
   const { data: org, error: eOrg } = await admin
     .from('organisations')
-    .insert({ nom: nomBoutique.trim(), slug })
+    .insert({ nom: nomBoutique.trim(), slug, type_activite: type })
     .select('id')
     .single();
   if (eOrg || !org) {
@@ -140,6 +142,15 @@ export async function POST(request: Request) {
       { message: pris ? 'Cet email est déjà utilisé.' : 'Erreur lors de la création du profil.' },
       { status: pris ? 409 : 500 },
     );
+  }
+
+  // 5) Catalogue de depart selon le commerce (prix a corriger par le patron).
+  //    Facultatif : un echec ici ne bloque pas l'inscription.
+  const depart = ACTIVITES[type].catalogue;
+  if (depart.length) {
+    await admin.from('produits').insert(depart.map(a => ({
+      organisation_id: org.id, nom: a.nom, prix: a.prix, suivi_stock: !a.service, stock_restant: 0, stock_initial: 0,
+    })));
   }
 
   if (trace?.id) await admin.from('inscriptions_journal').update({ reussie: true }).eq('id', trace.id);

@@ -349,6 +349,29 @@ try {
   verifier('repasse en Solo : le site est coupe', (await service.rpc('site_catalogue', { p_cle_hash: hashSite })).data === null);
 
   // ═══════════════════════════════════════════════════════════════
+  section('5 ter. Phase 7 : type de commerce et pressing');
+  verifier('mon_acces donne le type de commerce', (await vendB.client.rpc('mon_acces')).data?.type_activite === 'boutique');
+  verifier('la vendeuse B ne change pas le type', bloque(await vendB.client.from('organisations').update({ type_activite: 'pressing' }).eq('id', orgB).select()));
+  verifier('A ne change pas le type de B', bloque(await propA.client.from('organisations').update({ type_activite: 'bar' }).eq('id', orgB).select()));
+  verifier('boutique (pas pressing) : depot refuse', !!(await vendB.client.rpc('depots_liste', {})).error);
+  verifier('le proprietaire B passe en pressing', !bloque(await propB.client.from('organisations').update({ type_activite: 'pressing' }).eq('id', orgB).select('id')));
+  const svcB = await propB.client.from('produits').insert({ organisation_id: orgB, nom: 'Chemise', prix: 500, suivi_stock: false }).select('id, stock_restant').single();
+  verifier('le proprietaire B cree un service sans stock', !svcB.error && svcB.data?.stock_restant === 1000000, svcB.error?.message);
+  verifier('la vendeuse B ne cree pas de service', bloque(await vendB.client.from('produits').insert({ organisation_id: orgB, nom: 'X', prix: 1, suivi_stock: false }).select()));
+  const depB = await vendB.client.rpc('depot_creer', { p_cliente_nom: 'Cliente pressing', p_cliente_telephone: '690000001', p_produits: [{ produit_id: svcB.data?.id, quantite: 3 }], p_montant_paye: 500, p_mode_paiement: 'cash' });
+  verifier('la vendeuse B cree un depot (acompte libre)', !depB.error && Number(depB.data?.reste) === 1000, depB.error?.message);
+  verifier('ecriture directe dans depots refusee', bloque(await propB.client.from('depots').insert({ organisation_id: orgB, numero: 999, vente_id: depB.data?.vente_id }).select()));
+  verifier('lecture directe de depots refusee', lignes(await propB.client.from('depots').select('id')).length === 0);
+  verifier('A ne lit pas les depots de B', !!(await propA.client.rpc('depots_liste', { p_filtre: 'tous' })).error);
+  verifier('A ne cree pas de depot avec un service de B', !!(await propA.client.rpc('depot_creer', { p_cliente_nom: 'X', p_cliente_telephone: '690', p_produits: [{ produit_id: svcB.data?.id, quantite: 1 }], p_montant_paye: 0, p_mode_paiement: 'cash' })).error);
+  verifier('A ne retire pas un depot de B', !!(await propA.client.rpc('depot_retirer', { p_id: depB.data?.id })).error);
+  verifier('anonyme ne lit pas les depots', !!(await nouveauClient().rpc('depots_liste', {})).error);
+  verifier('la vendeuse B marque le depot pret', !(await vendB.client.rpc('depot_statut', { p_id: depB.data?.id, p_statut: 'pret' })).error);
+  const retB = await vendB.client.rpc('depot_retirer', { p_id: depB.data?.id, p_mode: 'cash' });
+  verifier('retrait : le reste est encaisse', !retB.error && Number(retB.data?.encaisse) === 1000, retB.error?.message);
+  verifier('double retrait refuse', !!(await vendB.client.rpc('depot_retirer', { p_id: depB.data?.id })).error);
+
+  // ═══════════════════════════════════════════════════════════════
   section('5. Boutique expiree (C)');
   const accC = await propC.client.rpc('mon_acces');
   verifier('mon_acces dit « pas d\'acces » a C', !accC.error && accC.data?.acces === false, JSON.stringify(accC.data || accC.error?.message));
