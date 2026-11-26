@@ -370,6 +370,12 @@ try {
   const retB = await vendB.client.rpc('depot_retirer', { p_id: depB.data?.id, p_mode: 'cash' });
   verifier('retrait : le reste est encaisse', !retB.error && Number(retB.data?.encaisse) === 1000, retB.error?.message);
   verifier('double retrait refuse', !!(await vendB.client.rpc('depot_retirer', { p_id: depB.data?.id })).error);
+  const kgB = await propB.client.from('produits').insert({ organisation_id: orgB, nom: 'Lavage au kilo', prix: 1000, suivi_stock: false, unite: 'kg' }).select('id').single();
+  verifier('le proprietaire B cree un lavage au kilo', !kgB.error, kgB.error?.message);
+  verifier('au kilo avec stock refuse', bloque(await propB.client.from('produits').insert({ organisation_id: orgB, nom: 'K', prix: 1, unite: 'kg' }).select()));
+  const depKg = await vendB.client.rpc('depot_creer', { p_cliente_nom: 'Cliente kilo', p_cliente_telephone: '690000002', p_produits: [{ produit_id: kgB.data?.id, poids: 2.5 }], p_montant_paye: 0, p_mode_paiement: 'cash' });
+  verifier('depot 2,5 kg = 2500', !depKg.error && Number(depKg.data?.total) === 2500, depKg.error?.message);
+  verifier('poids invalide refuse', !!(await vendB.client.rpc('depot_creer', { p_cliente_nom: 'X', p_cliente_telephone: '690', p_produits: [{ produit_id: kgB.data?.id, poids: -2 }], p_montant_paye: 0, p_mode_paiement: 'cash' })).error);
 
   // ═══════════════════════════════════════════════════════════════
   section('5. Boutique expiree (C)');

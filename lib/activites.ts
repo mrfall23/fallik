@@ -4,7 +4,7 @@
 
 export type TypeActivite = 'boutique' | 'bar' | 'restaurant' | 'pressing' | 'salon' | 'autre';
 
-type ArticleDepart = { nom: string; prix: number; service?: boolean };
+type ArticleDepart = { nom: string; prix: number; service?: boolean; kg?: boolean };
 
 export type Activite = {
   nom: string;
@@ -41,6 +41,7 @@ export const ACTIVITES: Record<TypeActivite, Activite> = {
     nom: 'Pressing', icone: 'local_laundry_service', description: 'Lavage, repassage, nettoyage à sec',
     menuArticles: 'Services & prix', exempleNom: 'Ex. Pressing Éclat',
     catalogue: [
+      { nom: 'Lavage au kilo', prix: 1000, service: true, kg: true },
       { nom: 'Chemise', prix: 500, service: true }, { nom: 'Pantalon', prix: 700, service: true },
       { nom: 'Veste', prix: 1500, service: true }, { nom: 'Costume 2 pièces', prix: 2500, service: true },
       { nom: 'Robe', prix: 1500, service: true }, { nom: 'Tenue traditionnelle', prix: 2000, service: true },

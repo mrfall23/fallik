@@ -149,7 +149,7 @@ export async function POST(request: Request) {
   const depart = ACTIVITES[type].catalogue;
   if (depart.length) {
     await admin.from('produits').insert(depart.map(a => ({
-      organisation_id: org.id, nom: a.nom, prix: a.prix, suivi_stock: !a.service, stock_restant: 0, stock_initial: 0,
+      organisation_id: org.id, nom: a.nom, prix: a.prix, suivi_stock: !a.service, unite: a.kg ? 'kg' : 'piece', stock_restant: 0, stock_initial: 0,
     })));
   }
 

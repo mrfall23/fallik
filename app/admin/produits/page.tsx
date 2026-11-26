@@ -5,9 +5,9 @@ import { useBoutique, SEUIL_STOCK_BAS_DEFAUT } from '@/lib/boutique';
 import { signalerAuPatron } from '../../components/ValidationGerant';
 import PanneauStock from './PanneauStock';
 
-type Produit = { id: number; nom: string; prix: number; description: string; stock_restant: number; stock_initial: number; image: string | null; actif: boolean; suivi_stock: boolean };
-type FormProduit = { nom: string; prix: number; description: string; stock_restant: number; image: string | null; prix_achat: string; service: boolean };
-const FORM_VIDE: FormProduit = { nom: '', prix: 0, description: '', stock_restant: 0, image: null, prix_achat: '', service: false };
+type Produit = { id: number; nom: string; prix: number; description: string; stock_restant: number; stock_initial: number; image: string | null; actif: boolean; suivi_stock: boolean; unite?: string };
+type FormProduit = { nom: string; prix: number; description: string; stock_restant: number; image: string | null; prix_achat: string; service: boolean; kg: boolean };
+const FORM_VIDE: FormProduit = { nom: '', prix: 0, description: '', stock_restant: 0, image: null, prix_achat: '', service: false, kg: false };
 const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 
 const INK = '#1A2438', BLUE = '#2563EB', MUTE = '#9AA3B2', SOFT = '#8A94A6', LINE = '#EAEEF5';
@@ -59,7 +59,7 @@ export default function AdminProduits() {
 
   const ouvrirAjout = () => { setForm(FORM_VIDE); setProduitEdite(null); setErreurForm(''); setModalOuvert(true); };
   const ouvrirEdit = (p: Produit) => {
-    setForm({ nom: p.nom, prix: p.prix, description: p.description || '', stock_restant: p.stock_restant, image: p.image, prix_achat: couts[p.id] !== undefined ? String(couts[p.id]) : '', service: p.suivi_stock === false });
+    setForm({ nom: p.nom, prix: p.prix, description: p.description || '', stock_restant: p.stock_restant, image: p.image, prix_achat: couts[p.id] !== undefined ? String(couts[p.id]) : '', service: p.suivi_stock === false, kg: p.unite === 'kg' });
     setProduitEdite(p); setErreurForm(''); setModalOuvert(true);
   };
   const fermerModal = () => { setModalOuvert(false); setProduitEdite(null); };
@@ -71,7 +71,7 @@ export default function AdminProduits() {
     const prixAchat = form.prix_achat.trim() === '' ? null : Number(form.prix_achat);
     if (prixAchat !== null && (isNaN(prixAchat) || prixAchat < 0)) { setErreurForm("Prix d'achat invalide."); return; }
     setSauvegarde(true); setErreurForm('');
-    const champs = { nom: form.nom.trim(), prix: form.prix, description: form.description, image: form.image, suivi_stock: !form.service };
+    const champs = { nom: form.nom.trim(), prix: form.prix, description: form.description, image: form.image, suivi_stock: !form.service, unite: form.service && form.kg ? 'kg' : 'piece' };
     if (produitEdite && produitEdite.suivi_stock !== false && form.service && produitEdite.stock_restant > 0
       && !confirm(`« ${produitEdite.nom} » deviendra un service sans stock : les ${produitEdite.stock_restant} en stock ne seront plus comptés. Continuer ?`)) { setSauvegarde(false); return; }
     let produitId = produitEdite?.id;
@@ -233,7 +233,7 @@ export default function AdminProduits() {
                       </td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <span style={{ fontSize: '15px', fontWeight: 800, color: INK }}>{fmt(p.prix)}</span>
-                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: BLUE, marginLeft: '4px' }}>{dev}</span>
+                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: BLUE, marginLeft: '4px' }}>{dev}{p.unite === 'kg' ? ' / kg' : ''}</span>
                         {cout !== undefined && (
                           <div style={{ fontSize: '11.5px', marginTop: '2px', color: p.prix - cout >= 0 ? '#1F9D6B' : '#D24444' }}>
                             Marge {fmt(p.prix - cout)} ({p.prix > 0 ? Math.round(((p.prix - cout) / p.prix) * 100) : 0} %)
@@ -292,7 +292,7 @@ export default function AdminProduits() {
                   <input style={inputStyle} value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Ex : Sac à main cuir" />
                 </div>
                 <div>
-                  <div style={labelStyle}>Prix de vente ({dev}) *</div>
+                  <div style={labelStyle}>Prix de vente ({dev}{form.service && form.kg ? ' par kg' : ''}) *</div>
                   <input style={inputStyle} type="number" min={0} value={form.prix || ''} onChange={e => setForm({ ...form, prix: Number(e.target.value) })} placeholder="0" />
                 </div>
                 <div>
@@ -329,6 +329,14 @@ export default function AdminProduits() {
                 <input type="checkbox" checked={form.service} onChange={e => setForm({ ...form, service: e.target.checked })} style={{ marginTop: '3px', width: '17px', height: '17px' }} />
                 <span style={{ fontSize: '13.5px', color: INK, lineHeight: 1.45 }}><b>C&apos;est un service</b> (pas de stock)<br /><span style={{ color: SOFT, fontSize: '12.5px' }}>Ex. : repassage d&apos;une chemise, coupe, plat cuisiné. Il se vend sans compter de stock.</span></span>
               </label>
+              {form.service && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ ...labelStyle, marginBottom: 0 }}>Prix par</span>
+                  {([[false, 'Pièce'], [true, 'Kilo (lavage au poids)']] as const).map(([v, l]) => (
+                    <button key={l} type="button" onClick={() => setForm({ ...form, kg: v })} style={{ height: '36px', padding: '0 14px', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 700, border: `1.5px solid ${form.kg === v ? BLUE : '#E4E9F2'}`, background: form.kg === v ? '#EEF3FC' : '#fff', color: form.kg === v ? BLUE : SOFT }}>{l}</button>
+                  ))}
+                </div>
+              )}
               <div style={{ marginBottom: '20px' }}>
                 <div style={labelStyle}>Description</div>
                 <textarea style={{ ...inputStyle, height: '72px', resize: 'vertical', paddingTop: '12px' }} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Description optionnelle…" />

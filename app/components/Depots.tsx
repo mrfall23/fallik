@@ -23,13 +23,17 @@ const ETATS: Record<string, { nom: string; col: string; bg: string; icone: strin
   retire:   { nom: 'Retiré',   col: MUTE,   bg: '#F4F6FA',               icone: 'done_all' },
 };
 
-type Ligne = { nom: string; quantite: number; prix: number };
+type Ligne = { nom: string; quantite: number; prix: number; poids?: number | null };
 type Depot = {
   id: number; numero: number; statut: string; date_retrait_prevue: string | null; note: string | null;
   cree_le: string; pret_le: string | null; retire_le: string | null; client: string; telephone: string | null;
   total: number; paye: number; reste: number; annulee: boolean; en_retard: boolean; oublie: boolean; lignes: Ligne[];
 };
-type Produit = { id: number; nom: string; prix: number; actif: boolean };
+type Produit = { id: number; nom: string; prix: number; actif: boolean; unite?: string };
+
+const kgFr = (n: number) => Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+// « 3,5 kg Lavage au kilo » ou « 2 × Chemise »
+const libelleLigne = (l: Ligne) => l.poids ? `${kgFr(l.poids)} kg ${l.nom}` : `${l.quantite} × ${l.nom}`;
 
 const dateCourte = (d?: string | null) => d ? new Date(d.length === 10 ? d + 'T12:00:00' : d).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
 const dansJours = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
@@ -41,7 +45,7 @@ function texteTicket(d: Depot, b: Boutique | null) {
     `${b?.nom || 'Pressing'} — Ticket n° ${d.numero}`,
     `Client : ${d.client}`,
     `Déposé le ${dateCourte(d.cree_le)}${d.date_retrait_prevue ? ` · retrait prévu ${dateCourte(d.date_retrait_prevue)}` : ''}`,
-    ...d.lignes.map(l => `${l.quantite} × ${l.nom} : ${fmt(l.quantite * l.prix)} ${dev}`),
+    ...d.lignes.map(l => `${libelleLigne(l)} : ${fmt(l.quantite * l.prix)} ${dev}`),
     `Total : ${fmt(d.total)} ${dev} · Payé : ${fmt(d.paye)} ${dev} · Reste : ${fmt(d.reste)} ${dev}`,
     ...(d.note ? [`Note : ${d.note}`] : []),
     ...(b?.telephone ? [`Contact : ${b.telephone}`] : []),
@@ -87,7 +91,7 @@ export default function Depots({ isMobile }: { isMobile: boolean }) {
   }, [charger, recherche]);
   useEffect(() => {
     lireBoutique().then(setBoutique);
-    supabase.from('produits').select('id, nom, prix, actif').eq('actif', true).order('nom').then(({ data }) => setProduits((data as Produit[]) || []));
+    supabase.from('produits').select('id, nom, prix, actif, unite').eq('actif', true).order('nom').then(({ data }) => setProduits((data as Produit[]) || []));
   }, []);
 
   const changerEtat = async (d: Depot, statut: string) => {
@@ -162,7 +166,7 @@ export default function Depots({ isMobile }: { isMobile: boolean }) {
                   </span>
                 </div>
                 <div style={{ fontSize: '13px', color: '#5A6472', lineHeight: 1.5, marginBottom: '6px' }}>
-                  {d.lignes.map(l => `${l.quantite} × ${l.nom}`).join(', ')}
+                  {d.lignes.map(libelleLigne).join(', ')}
                 </div>
                 {d.note && <div style={{ fontSize: '12.5px', color: ORANGE, marginBottom: '6px' }}>Note : {d.note}</div>}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: '12.5px', color: SOFT, marginBottom: '10px' }}>
@@ -231,6 +235,9 @@ function NouveauDepot({ produits, dev, onFermer, onCree }: { produits: Produit[]
   const [nom, setNom] = useState('');
   const [tel, setTel] = useState('');
   const [qte, setQte] = useState<Record<number, number>>({});
+  const [poids, setPoids] = useState<Record<number, string>>({});
+  const kg = (p: Produit) => p.unite === 'kg';
+  const poidsDe = (id: number) => { const n = Number((poids[id] || '').replace(',', '.')); return isFinite(n) && n > 0 ? n : 0; };
   const [acompte, setAcompte] = useState('');
   const [mode, setMode] = useState('cash');
   const [date, setDate] = useState(dansJours(2));
@@ -238,21 +245,27 @@ function NouveauDepot({ produits, dev, onFermer, onCree }: { produits: Produit[]
   const [occupe, setOccupe] = useState(false);
   const [erreur, setErreur] = useState('');
 
-  const total = produits.reduce((a, p) => a + (qte[p.id] || 0) * Number(p.prix), 0);
+  const total = produits.reduce((a, p) => a + (kg(p) ? Math.round(poidsDe(p.id) * Number(p.prix)) : (qte[p.id] || 0) * Number(p.prix)), 0);
   const nbPieces = Object.values(qte).reduce((a, n) => a + n, 0);
+  const totalKg = produits.filter(kg).reduce((a, p) => a + poidsDe(p.id), 0);
   const ajuster = (id: number, d: number) => setQte(q => ({ ...q, [id]: Math.max(0, (q[id] || 0) + d) }));
 
   const valider = async () => {
     setErreur('');
     if (!nom.trim()) return setErreur('Le nom du client est obligatoire.');
     if (!tel.trim()) return setErreur('Le téléphone du client est obligatoire (pour le prévenir).');
-    if (nbPieces === 0) return setErreur('Ajoutez au moins un vêtement.');
+    if (nbPieces === 0 && totalKg === 0) return setErreur('Ajoutez au moins un vêtement ou un poids.');
+    const mauvais = produits.find(p => kg(p) && (poids[p.id] || '').trim() !== '' && (poidsDe(p.id) <= 0 || poidsDe(p.id) > 200));
+    if (mauvais) return setErreur(`Poids invalide pour « ${mauvais.nom} » (entre 0,1 et 200 kg).`);
     const paye = acompte.trim() === '' ? 0 : Number(acompte);
     if (isNaN(paye) || paye < 0 || paye > total) return setErreur(`L'acompte doit être entre 0 et ${fmt(total)} ${dev}.`);
     setOccupe(true);
     const { data, error } = await supabase.rpc('depot_creer', {
       p_cliente_nom: nom.trim(), p_cliente_telephone: tel.trim(),
-      p_produits: Object.entries(qte).filter(([, n]) => n > 0).map(([id, n]) => ({ produit_id: Number(id), quantite: n })),
+      p_produits: [
+        ...produits.filter(p => !kg(p) && (qte[p.id] || 0) > 0).map(p => ({ produit_id: p.id, quantite: qte[p.id] })),
+        ...produits.filter(p => kg(p) && poidsDe(p.id) > 0).map(p => ({ produit_id: p.id, poids: poidsDe(p.id) })),
+      ],
       p_montant_paye: paye, p_mode_paiement: mode, p_date_retrait: date || null, p_note: note.trim() || null,
     });
     setOccupe(false);
@@ -273,6 +286,17 @@ function NouveauDepot({ produits, dev, onFermer, onCree }: { produits: Produit[]
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: '8px', marginBottom: '14px' }}>
           {produits.map(p => {
             const n = qte[p.id] || 0;
+            if (kg(p)) return (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '12px', border: `1px solid ${poidsDe(p.id) ? 'rgba(37,99,235,.45)' : LINE}`, background: poidsDe(p.id) ? '#F5F8FF' : '#fff' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: INK, lineHeight: 1.2 }}>{p.nom}</div>
+                  <div style={{ fontSize: '11.5px', color: BLUE, fontWeight: 700 }}>{fmt(p.prix)} / kg</div>
+                </div>
+                <input inputMode="decimal" value={poids[p.id] || ''} onChange={e => setPoids(x => ({ ...x, [p.id]: e.target.value }))} placeholder="0" aria-label={`Poids pour ${p.nom}`}
+                  style={{ width: '64px', height: '34px', padding: '0 8px', borderRadius: '9px', border: '1px solid #E4E9F2', background: '#F6F8FC', outline: 'none', fontSize: '14px', fontWeight: 700, color: INK, textAlign: 'right' }} />
+                <span style={{ fontSize: '12.5px', fontWeight: 700, color: SOFT }}>kg</span>
+              </div>
+            );
             return (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '12px', border: `1px solid ${n ? 'rgba(37,99,235,.45)' : LINE}`, background: n ? '#F5F8FF' : '#fff' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -288,7 +312,7 @@ function NouveauDepot({ produits, dev, onFermer, onCree }: { produits: Produit[]
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '10px 14px', borderRadius: '12px', background: '#F6F8FC', marginBottom: '14px' }}>
-        <span style={{ fontSize: '13px', color: SOFT }}>{nbPieces} pièce{nbPieces > 1 ? 's' : ''}</span>
+        <span style={{ fontSize: '13px', color: SOFT }}>{[nbPieces ? `${nbPieces} pièce${nbPieces > 1 ? 's' : ''}` : '', totalKg ? `${kgFr(totalKg)} kg` : ''].filter(Boolean).join(' + ') || '0 pièce'}</span>
         <span style={{ fontSize: '18px', fontWeight: 800, color: INK }}>{fmt(total)} {dev}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '12px', marginBottom: '12px' }}>
@@ -335,7 +359,7 @@ function RetraitModal({ d, dev, onFermer, onFait }: { d: Depot; dev: string; onF
   return (
     <Modal titre={`Remettre le n° ${d.numero}`} onFermer={onFermer}>
       <p style={{ fontSize: '14px', color: INK, margin: '0 0 12px' }}>
-        <b>{d.client}</b> récupère : {d.lignes.map(l => `${l.quantite} × ${l.nom}`).join(', ')}.
+        <b>{d.client}</b> récupère : {d.lignes.map(libelleLigne).join(', ')}.
       </p>
       {reste > 0 ? (
         <>
