@@ -28,7 +28,12 @@ export default function AccueilPage() {
     const { data: auth, error } = await supabase.auth.signInWithPassword({ email: mail.trim().toLowerCase(), password: mdp });
     if (error || !auth.user) return { ok: false, message: 'Email ou mot de passe incorrect.' };
     const { data: profil } = await supabase.from('utilisateurs').select('role, actif').eq('auth_id', auth.user.id).single();
-    if (!profil) { await supabase.auth.signOut(); return { ok: false, message: 'Compte introuvable.' }; }
+    if (!profil) {
+      // Compte Fall Digital : pas de boutique, il va directement a la console.
+      const { data: sa } = await supabase.rpc('suis_super_admin');
+      if (sa === true) { router.replace('/fall-digital'); return { ok: true as const }; }
+      await supabase.auth.signOut(); return { ok: false, message: 'Compte introuvable.' };
+    }
     if (!profil.actif) { await supabase.auth.signOut(); return { ok: false, message: 'Ce compte a été désactivé.' }; }
     router.replace(accueilPourRole(profil.role));
     return { ok: true as const };
